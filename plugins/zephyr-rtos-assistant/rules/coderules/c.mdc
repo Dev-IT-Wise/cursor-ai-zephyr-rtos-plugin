@@ -1,0 +1,415 @@
+---
+description: "C coding style for Zephyr project (Zephyr Kernel style)"
+globs:
+  - "**/*.c"
+  - "**/*.h"
+alwaysApply: false
+---
+# C Coding Style - Zephyr Kernel Style
+
+**Applies to:** files when written in C
+
+---
+
+## 1. Core Principles
+
+- **Static Facade pattern** (static functions with prefix, file-local state)- **snake_case** for everything (functions, variables, types)
+- **Module prefix** for all public API functions (`module_init()`, `module_process()`)
+- **Device Tree first** (use DT macros for configuration, not hardcoded values)
+- **Fixed-width types** from `<stdint.h>` (`uint32_t`, not `int`)
+- **`bool`** for all functions that return only true/false — never `int` for boolean semantics
+- **C99/C11** standard with **no dynamic allocation**, **static allocation only**
+- **Thread-safe** (Zephyr mutexes), **custom error enums** for module-specific errors
+
+---
+
+## 2. Naming Conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| **Files** | `snake_case.h/c` | `data_processor.h`, `data_processor.c` |
+| **Functions (Public)** | `prefix_function_name()` | `data_processor_init()`, `data_processor_process()` |
+| **Functions (Static)** | `function_name()` (no prefix) | `static int validate_config()` |
+| **Types (structs)** | `typedef struct` + `prefix_name_t` | `typedef struct { ... } data_processor_config_t;` |
+| **Enums** | `typedef enum` + `prefix_name_t` + `PREFIX_VALUE` | `typedef enum { STATE_IDLE } state_t;` |
+| **Variables** | `snake_case` | `sensor_value`, `buffer_size` |
+| **Static Variables** | `snake_case` (file-local) | `static bool is_initialized` |
+| **Macros** | `UPPER_SNAKE_CASE` | `MAX_BUFFER_SIZE` |
+| **Kconfig** | `CONFIG_PREFIX_NAME` | `CONFIG_DATA_PROCESSOR` |
+
+---
+
+## 3. Minimal Structural Skeleton
+
+### Header (.h)
+```c
+#pragma once
+
+#include <zephyr/kernel.h>
+
+typedef enum {
+	MODULE_OK = 0,
+	MODULE_ERR_ALREADY,
+	MODULE_ERR_INVAL,
+	/* ... */
+} module_err_t;
+
+module_err_t module_name_init(void);
+int module_name_process(const uint8_t *data, size_t len);
+```
+
+### Implementation (.c)
+```c
+#include "module_name.h"
+
+#include <stdint.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(module_name, CONFIG_MODULE_NAME_LOG_LEVEL);
+
+/* ✅ ALL state declared HERE (static) */
+static bool is_initialized = false;
+static struct k_mutex mutex;
+
+module_err_t module_name_init(void)
+{
+    k_mutex_init(&mutex);
+    /* Logic: Lock -> Check -> Init -> Unlock */
+    if (is_initialized) {
+        return MODULE_ERR_ALREADY;
+    }
+    is_initialized = true;
+    return MODULE_OK;
+}
+```
+
+---
+
+## 4. Must / Must Not Rules
+
+### ✅ Architecture (MUST)
+- **MUST use Static Facade pattern** (static state at file scope, prefixed public functions)
+- **MUST declare ALL state as `static` in .c file** (file-local scope)
+- **MUST organize state in `static struct` blocks** for clarity (e.g., `static struct { ... } state`)
+- **MUST use thread-safety** with `struct k_mutex`
+- **MUST lock critical sections**: `k_mutex_lock(&mutex, K_FOREVER)` + `k_mutex_unlock(&mutex)`
+- **MUST prefix ALL public functions** with module name (`data_processor_init()`)
+
+### ✅ Naming (MUST)
+- **MUST use snake_case** for all functions, variables, files
+- **MUST use module prefix** for public APIs (`module_name_function()`)
+- **MUST use typedef with `_t` suffix** for all struct and enum types
+- **MUST use UPPER_SNAKE_CASE** for macros and enum values
+- **MUST use CONFIG_ prefix** for Kconfig symbols
+
+### ✅ Zephyr Integration (MUST)
+- **MUST use Device Tree macros** (`DT_INST_*`, `DT_PROP`) for hardware config (NOT hardcoded values)
+- **MUST use fixed-width types** from `<stdint.h>` (`uint8_t`, `int32_t`, NOT `int`/`long`)
+- **MUST define custom error enums** (e.g. `module_err_t`) when caller needs specific error codes — avoid raw `int`/errno
+- **MUST use `bool`** for any function that returns only success/failure, present/absent, valid/invalid — **never `int`** for boolean semantics (use custom enum only when caller needs specific error codes)
+- **MUST use `LOG_MODULE_REGISTER`** in .c file
+- **MUST use `k_mutex_init()` or `K_MUTEX_DEFINE`** for mutexes
+
+### ✅ File Structure (MUST)
+- **MUST use `#pragma once`** (NOT include guards)
+- **MUST follow include order**: 1. Module header, 2. Standard C libs, 3. Zephyr headers, 4. Local headers
+- **MUST document public APIs** with Doxygen using `@` prefix (NOT `\`)
+- **MUST keep state in .c file** (NOT in .h header)
+
+### ❌ Prohibitions (MUST NOT)
+- **MUST NOT use global variables** (use `static` for file-local scope)
+- **MUST NOT expose state in header** (keep in .c file only)
+- **MUST NOT hardcode hardware config** (use Device Tree macros)
+- **MUST NOT use plain `int`/`long`** (use `int32_t`, `uint32_t` etc.)
+- **MUST NOT use `int` for boolean return types** — use `bool` from `<stdbool.h>` when function returns only true/false
+- **MUST NOT use dynamic allocation** (`malloc`, `free`, `calloc`, `realloc`)
+- **MUST NOT use VLAs** (variable-length arrays)
+- **MUST NOT ignore return values** from Zephyr APIs
+- **MUST NOT use struct/enum without typedef** (always use `typedef struct/enum`)
+- **MUST NOT use backslash in Doxygen** (use `@param`, NOT `\param`)
+
+---
+
+## 5. Code Style
+
+### K&R Braces
+```c
+void function(void)
+{
+    if (condition) {
+        statement;
+    }
+}
+```
+
+### Spacing
+```c
+if (condition)              /* Space after keyword */
+function_name(arg1, arg2)   /* No space after function name */
+x = y + z;                  /* Spaces around operators */
+int *ptr;                   /* Pointer with type */
+```
+
+### Include Order
+```c
+/* 1. Module header */
+#include "module_name.h"
+
+/* 2. Standard C libs */
+#include <stdint.h>
+#include <stdbool.h>
+
+/* 3. Zephyr headers */
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/logging/log.h>
+
+/* 4. Local headers */
+#include "local_helper.h"
+```
+
+### Pointer Notation
+```c
+int *ptr;                 /* Pointer with type */
+const uint8_t *data;      /* Fixed-width type */
+const struct device *dev; /* Const pointer */
+```
+
+### Logging
+```c
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(module_name, CONFIG_MODULE_NAME_LOG_LEVEL);
+
+LOG_ERR("Error: %d", code);
+LOG_WRN("Warning: state=%d", state);
+LOG_INF("Initialized");
+LOG_DBG("Debug: value=%d", value);
+```
+
+### Documentation
+```c
+/**
+ * @brief Brief description
+ * @param[in] input Input parameter
+ * @param[out] output Output parameter
+ * @return MODULE_OK on success, module_err_t on error
+ * @retval MODULE_ERR_INVAL Invalid parameter
+ */
+module_err_t module_function(int input, int *output);
+```
+
+### Struct Definition
+```c
+/* ✅ CORRECT - typedef with _t suffix */
+typedef struct {
+    uint32_t timeout_ms;
+} module_config_t;
+
+/* ✅ Anonymous static struct for state (no typedef needed) */
+static struct {
+    bool is_active;
+    uint32_t counter;
+} state = {0};
+
+/* ❌ WRONG - struct without typedef */
+struct module_config {
+    uint32_t timeout_ms;
+};
+```
+
+### Enums
+```c
+/* ✅ CORRECT - typedef enum with _t suffix */
+typedef enum {
+    MODULE_STATE_IDLE = 0,
+    MODULE_STATE_ACTIVE
+} module_state_t;
+
+/* ✅ Error enum for functions that need specific error codes */
+typedef enum {
+    MODULE_OK = 0,
+    MODULE_ERR_INVAL,
+    MODULE_ERR_BUSY,
+    MODULE_ERR_NO_DEV
+} module_err_t;
+
+/* ✅ Scalar typedef (OK for non-struct) */
+typedef uint32_t module_id_t;
+```
+
+### Device Tree Integration
+```c
+/* ✅ Get config from DT (NOT hardcoded) */
+#define DT_DRV_COMPAT vendor_module
+
+static const struct module_config cfg = {
+    .pin = DT_INST_PROP(0, pin),
+    .freq = DT_INST_PROP(0, frequency)
+};
+```
+
+---
+
+## 6. Anti-Patterns (What NOT to Do)
+
+### ❌ Global Variables
+```c
+/* WRONG - visible to entire program */
+bool is_initialized;
+uint8_t buffer[256];
+
+/* CORRECT - file-local only */
+static bool is_initialized = false;
+static uint8_t buffer[256] = {0};
+```
+
+### ❌ State in Header
+```c
+/* WRONG - data_processor.h */
+static bool is_initialized;  /* Don't put state in header! */
+
+/* CORRECT - data_processor.c */
+static bool is_initialized = false;  /* State in .c only */
+```
+
+### ❌ Missing Thread Safety
+```c
+/* WRONG - race condition! */
+static int counter = 0;
+counter++;
+
+/* CORRECT */
+static struct k_mutex counter_mutex;
+k_mutex_lock(&counter_mutex, K_FOREVER);
+counter++;
+k_mutex_unlock(&counter_mutex);
+```
+
+### ❌ Wrong Function Naming
+```c
+/* WRONG - no module prefix */
+int init(void);
+int process(void);
+
+/* CORRECT - prefixed public API */
+int data_processor_init(void);
+int data_processor_process(void);
+
+/* CORRECT - static helper (no prefix needed) */
+static int validate_input(void);
+```
+
+### ❌ Dynamic Allocation
+```c
+/* WRONG */
+uint8_t *buf = malloc(256);
+free(buf);
+
+/* CORRECT */
+static uint8_t buffer[256];
+```
+
+### ❌ Struct Without Typedef
+```c
+/* WRONG - struct without typedef */
+struct module_config {
+    uint32_t value;
+};
+
+/* CORRECT - typedef struct with _t suffix */
+typedef struct {
+    uint32_t value;
+} module_config_t;
+```
+
+### ❌ Plain Integer Types
+```c
+/* WRONG - architecture-dependent size */
+int counter;
+long timeout;
+unsigned short port;
+
+/* CORRECT - fixed-width types */
+int32_t counter;
+int64_t timeout;
+uint16_t port;
+```
+
+### ❌ Hardcoded Hardware Config
+```c
+/* WRONG - hardcoded pin/address */
+#define GPIO_PIN 5
+#define I2C_ADDR 0x48
+
+/* CORRECT - from Device Tree */
+#define GPIO_PIN DT_INST_PROP(0, pin)
+#define I2C_ADDR DT_INST_REG_ADDR(0)
+```
+
+### ❌ Missing Error Checks
+```c
+/* WRONG - ignoring return value */
+device_get_binding("DEV");
+
+/* CORRECT - check and map to module enum */
+const struct device *dev = device_get_binding("DEV");
+if (!dev) {
+    return MODULE_ERR_NO_DEV;
+}
+```
+
+### ❌ Wrong Error Codes
+```c
+/* WRONG - returning 1, -1, raw errno */
+if (error) return -1;
+if (error) return -EINVAL;
+
+/* CORRECT - custom error enum */
+if (!data) return MODULE_ERR_INVAL;
+if (busy) return MODULE_ERR_BUSY;
+if (!initialized) return MODULE_ERR_NO_DEV;
+return MODULE_OK;
+```
+
+### ❌ int for Boolean Return (use bool)
+```c
+/* WRONG - int for true/false semantics */
+int check_ready(void);
+int is_valid(const char *str);
+
+/* CORRECT - bool for any true/false return */
+bool check_ready(void);
+bool is_valid(const char *str);
+/* Return bool. Use custom enum (e.g. module_err_t) only when caller needs specific error codes. */
+```
+
+### ❌ No Mutex Initialization
+```c
+/* WRONG - using uninitialized mutex */
+static struct k_mutex mutex;
+k_mutex_lock(&mutex, K_FOREVER);  /* Will fail! */
+
+/* CORRECT - initialize first */
+static struct k_mutex mutex;
+k_mutex_init(&mutex);  /* In init() function */
+k_mutex_lock(&mutex, K_FOREVER);
+
+/* OR use static initialization */
+K_MUTEX_DEFINE(mutex);
+```
+
+---
+
+## 7. Cursor AI Instructions
+
+**When adding/editing C code in this project:**
+
+1. **Always place new state variables** in a `static struct` block at the top of .c file
+2. **Check for existing DT bindings** before hardcoding values
+3. **Prefer fixed-width types** (`uint32_t`) over plain `int`
+4. **Use `bool` for boolean returns** — any function that returns only true/false must have return type `bool`, never `int`
+5. **Follow include order**: module header → std libs → zephyr → local
+6. **Use `@` prefix** for all Doxygen commands
+
+---

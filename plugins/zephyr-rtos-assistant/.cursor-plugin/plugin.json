@@ -1,0 +1,25 @@
+{
+  "name": "zephyr-rtos-assistant",
+  "version": "0.1.0",
+  "description": "Your AI assistant for Zephyr RTOS — coding rules, commands, and best practices. Kconfig, DeviceTree, drivers, and libraries. Less doc hunting, more coding.",
+  "author": {
+    "name": "Devitwise",
+    "url": "https://devitwise.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "zephyr",
+    "rtos",
+    "ncs",
+    "nordic",
+    "embedded",
+    "iot",
+    "c",
+    "cpp",
+    "device-tree",
+    "kconfig",
+    "drivers",
+    "awesome"
+  ],
+  "logo": "assets/logo.svg"
+}

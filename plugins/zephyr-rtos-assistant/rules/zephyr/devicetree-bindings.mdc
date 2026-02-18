@@ -1,0 +1,213 @@
+---
+description: Zephyr Devicetree bindings syntax and structure - YAML schema for DTS nodes
+globs:
+  - dts/bindings/**/*.yaml
+alwaysApply: false
+---
+
+# Zephyr Devicetree Bindings
+
+**Apply when:** Creating or editing Devicetree binding files (YAML) that describe hardware nodes.
+
+**Reference:** [Zephyr Devicetree bindings syntax](https://docs.zephyrproject.org/latest/build/dts/bindings-syntax.html), [bindings intro](https://docs.zephyrproject.org/latest/build/dts/bindings-intro.html)
+
+---
+
+## Core Principles
+
+1. **Location:** Bindings must be in `dts/bindings/[vendor]/[binding-name].yaml` (see `rules/zephyr/drivers.mdc`).
+2. **Compatible:** Each binding matches nodes via `compatible: "vendor,device"`; vendor must be in Zephyr `vendor-prefixes.txt`.
+3. **Properties:** Only properties listed in `properties:` generate C macros for DTS access.
+4. **Include base:** Prefer including `base.yaml` and common bus bindings (`i2c-device.yaml`, `spi-device.yaml`, etc.) over redefining standard properties.
+5. **English only:** Use English in `description`, `title`, and property descriptions.
+
+---
+
+## Top-Level Keys
+
+| Key | Required | Purpose |
+|-----|----------|---------|
+| `compatible` | **YES** | Match nodes; format `"vendor,device"` |
+| `description` | **YES** | Free-form hardware description (multiline OK) |
+| `properties` | Usually | Property definitions for matching nodes |
+| `title` | No | Short title (max 100 chars), optional |
+| `include` | No | Merge other bindings (`base.yaml`, bus bindings) |
+| `bus` | If bus controller | e.g. `bus: spi` for SPI controller |
+| `on-bus` | If bus device | e.g. `on-bus: i2c` for I2C device |
+| `child-binding` | No | Constrain children; works recursively |
+| `examples` | No | Sample DTS node for validation |
+| `*-cells` | If controller | Cell names for phandle-array specifiers (e.g. `pwm-cells`) |
+
+---
+
+## Property Entry Syntax
+
+```yaml
+<property-name>:
+  type: <string | int | boolean | array | uint8-array | string-array |
+        phandle | phandles | phandle-array | path | compound>
+  required: true   # default: false; omit redundant required: false
+  deprecated: false   # omit redundant deprecated: false
+  default: <value>   # used when property absent
+  description: <description>
+  enum: [item1, item2, ...]
+  const: <value>
+  specifier-space: <name>   # for phandle-array; use sparingly
+```
+
+---
+
+## Property Types Reference
+
+| Type | DTS example |
+|------|-------------|
+| `string` | `status = "disabled";` |
+| `int` | `current-speed = <115200>;` |
+| `boolean` | `hw-flow-control;` (no value when true) |
+| `array` | `offsets = <0x100 0x200>;` |
+| `uint8-array` | `local-mac-address = [de ad be ef 12 34];` |
+| `string-array` | `dma-names = "tx", "rx";` |
+| `phandle` | `interrupt-parent = <&gic>;` |
+| `phandles` | `pinctrl-0 = <&a &b>;` |
+| `phandle-array` | `dmas = <&dma0 2>, <&dma0 3>;` |
+| `path` | `foo = &uart0;` or `foo = "/path";` |
+| `compound` | Catch-all; no macros generated |
+
+---
+
+## Naming Conventions
+
+| Element | Convention | Example |
+|---------|-------------|---------|
+| Binding file | `vendor,device[-bus].yaml` | `vendor,sensor-axl.yaml`, `vendor,sensor-i2c.yaml` |
+| Compatible | `vendor,device` | `"vendor,sensor-axl"` |
+| Vendor prefix | From `vendor-prefixes.txt` | `vendor`, `nxp`, `st` |
+| phandle-array props | `*-gpios`, `*-names` | `gpios`, `pwms`, `dma-names` |
+| Specifier-space | Implicit from prop name | `foo-gpios` → gpio; `mboxes` → use `specifier-space: mbox` |
+
+---
+
+## Bus and On-Bus
+
+- **Bus controller:** Add `bus: spi` (or `i2c`, `[i3c, i2c]` for dual).
+- **Device on bus:** Add `on-bus: spi` (or `i2c`).
+- Bindings are matched by `(compatible, on-bus)`; bus-specific bindings take precedence when node is on that bus.
+
+---
+
+## Include and Filtering
+
+```yaml
+# Simple
+include: base.yaml
+
+# Multiple
+include:
+  - base.yaml
+  - i2c-device.yaml
+
+# Filter properties
+include:
+  - name: foo.yaml
+    property-allowlist: [prop-a, prop-b]
+  - name: bar.yaml
+    property-blocklist: [exclude-this]
+```
+
+- **Merge rules:** Overlapping keys must match; exception: `required: true` can strengthen `required: false` from included file.
+- **Weakening forbidden:** `required: false` where included has `required: true` is an error.
+
+---
+
+## Specifier Cells (`*-cells`)
+
+Controllers referenced in `phandle-array` properties must define cell names:
+
+```yaml
+compatible: "foo,pwm"
+pwm-cells:
+  - channel
+  - period
+```
+
+- Empty specifiers (`#clock-cells = <0>`): omit `*-cells` or use `clock-cells: []`.
+- `*-names` on node gives names to entries (e.g. `pwm-names`).
+
+---
+
+## Structural Skeleton
+
+```yaml
+description: |
+  Brief description of the device. Link to datasheet if applicable.
+
+compatible: "vendor,device"
+
+include:
+  - base.yaml
+  # - i2c-device.yaml   # if on I2C bus
+  # - spi-device.yaml   # if on SPI bus
+
+# on-bus: i2c   # if device on I2C bus
+
+properties:
+  reg:
+    required: true
+  sample-rate:
+    type: int
+    default: 50
+    description: Sampling rate in Hz
+  sensitivity:
+    type: int
+    enum: [2, 4, 8, 16]
+    default: 2
+    description: Sensitivity range in g
+
+# examples:
+#   - |
+#       mydev: device@0 {
+#         compatible = "vendor,device";
+#         reg = <0>;
+#       };
+```
+
+---
+
+## Must / Must Not
+
+### MUST
+
+- ✅ Place bindings in `dts/bindings/[vendor]/[name].yaml` (project layout).
+- ✅ Use `compatible` in `"vendor,device"` format; vendor from accepted prefixes.
+- ✅ Include `description` (free-form hardware description).
+- ✅ Check `base.yaml` and bus bindings before defining common properties.
+- ✅ Use `required: true` only when property is mandatory.
+- ✅ Use `enum` or `const` to constrain values when applicable.
+- ✅ Use `on-bus` for devices on I2C, SPI, etc.
+- ✅ Use `bus` for bus controller nodes.
+- ✅ Write all descriptions in English.
+
+### MUST NOT
+
+- ❌ Use `required: false` explicitly (redundant; omit).
+- ❌ Use `deprecated: false` explicitly (redundant; omit).
+- ❌ Combine `default:` with `required: true`.
+- ❌ Use `specifier-space` to work around naming conventions (use `-gpios`, etc.).
+- ❌ Put bindings in driver folder; use global `dts/bindings/`.
+- ❌ Use vendor prefixes not in Zephyr `vendor-prefixes.txt` (for upstream compatibility).
+- ❌ Abuse `specifier-space` to name properties unconventionally (e.g. `my-pin` with gpio space); use `-gpios` / `-gpio` for GPIOs.
+
+---
+
+## Child-Binding and Recursion
+
+- **child-binding:** Apply to children of matching nodes; child's explicit `compatible` takes precedence if a binding exists.
+- **Recursive:** `child-binding` can nest; applies to grandchildren, etc.
+- **Nexus nodes:** `phandle-array` properties support `*-map` (e.g. `gpio-map`) for connector/mapping nodes per Devicetree spec.
+
+---
+
+## References
+
+- [Zephyr Devicetree bindings syntax](https://docs.zephyrproject.org/latest/build/dts/bindings-syntax.html)
+- `rules/zephyr/drivers.mdc` — Binding location, driver integration

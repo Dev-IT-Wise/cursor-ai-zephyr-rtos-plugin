@@ -1,0 +1,120 @@
+---
+description: "SPDX license header format - use ONLY when user explicitly asks about licenses or requests license headers"
+alwaysApply: false
+---
+
+# SPDX License Header
+
+**Apply when:** User explicitly requests license headers, asks about SPDX format, or mentions licensing. Do NOT apply automatically when creating files.
+
+---
+
+## Core Principles
+
+1. **Placement:** License header is the **first line** of the file (before shebang in scripts, before any other content).
+2. **Format:** Use SPDX short identifier syntax — exact format depends on file type.
+3. **Default license:** Apache-2.0 for this Zephyr project.
+4. **Copyright holder:** Include company name — **default: DevITWise**.
+5. **Exceptions:** `.conf` fragments, `.yml`/`.yaml` (snippet config), and generated files may omit license per context.
+
+---
+
+## Format by File Type
+
+| File Type | Syntax | Example |
+|-----------|--------|---------|
+| C, C++, DTS overlay | `/* ... */` | `/* Copyright (c) 2026 DevITWise */` + `/* SPDX-License-Identifier: Apache-2.0 */` |
+| CMake, Kconfig, Shell | `# ...` | `# Copyright (c) 2026 DevITWise` + `# SPDX-License-Identifier: Apache-2.0` |
+| Python | `# ...` | `# Copyright (c) 2026 DevITWise` + `# SPDX-License-Identifier: Apache-2.0` |
+
+---
+
+## Placement Rules
+
+### C/C++ (`.c`, `.h`, `.cpp`, `.hpp`)
+
+- **First line** of the file.
+- Followed by blank line, then `#pragma once` or includes.
+
+```c
+/* Copyright (c) 2026 DevITWise */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+#pragma once
+```
+
+### CMake (`CMakeLists.txt`)
+
+- **First line** of the file.
+
+```cmake
+# Copyright (c) 2026 DevITWise
+# SPDX-License-Identifier: Apache-2.0
+
+zephyr_library()
+```
+
+### Kconfig (`Kconfig`)
+
+- **First line** of the file (before `menu`).
+
+```kconfig
+# Copyright (c) 2026 DevITWise
+# SPDX-License-Identifier: Apache-2.0
+
+menu "Component Name"
+```
+
+### DTS overlay (`.overlay`)
+
+- **First line** of the file.
+
+```dts
+/* Copyright (c) 2026 DevITWise */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/ {
+```
+
+### Shell scripts (`.sh`)
+
+- **After shebang**, before `set -euo pipefail` or other commands.
+
+```bash
+#!/bin/bash
+# Copyright (c) 2026 DevITWise
+# SPDX-License-Identifier: Apache-2.0
+set -euo pipefail
+```
+
+### Python (`.py`)
+
+- **First line** if no shebang; **second line** if shebang present.
+
+```python
+# Copyright (c) 2026 DevITWise
+# SPDX-License-Identifier: Apache-2.0
+```
+
+---
+
+## Exceptions (Do Not Add)
+
+- **`.conf` files** (Kconfig fragments): No SPDX — they are concatenated into the build.
+- **`snippet.yml` / `module.yml`**: No SPDX in typical project layout.
+- **Generated or auto-created** files where the generator controls headers.
+
+---
+
+## Must / Must Not
+
+### MUST:
+- ✅ Add SPDX header to new `.c`, `.h`, `.cpp`, `.hpp`, `CMakeLists.txt`, `Kconfig`, `.overlay`.
+- ✅ Include copyright line with company name — **default: DevITWise** (e.g. `Copyright (c) 2026 DevITWise`).
+- ✅ Use Apache-2.0 for this Zephyr project.
+- ✅ Place header as the first line (or second after shebang in scripts).
+
+### MUST NOT:
+- ❌ Add SPDX to `.conf` Kconfig fragments.
+- ❌ Place license after includes or other content.
+- ❌ Use a different license without project approval.

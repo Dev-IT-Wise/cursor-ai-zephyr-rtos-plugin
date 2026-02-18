@@ -1,0 +1,478 @@
+---
+description: Complete guide for creating effective Cursor rules with Zephyr RTOS embedded constraints
+globs:
+  - rules/**/*.mdc
+  - rules/**/*.md
+alwaysApply: false
+---
+
+# How to Create Effective Cursor Rules
+
+**Goal:** Comprehensive guide for creating well-structured Cursor rules that align with official best practices and Zephyr RTOS embedded constraints.
+
+**Usage:** This rule is automatically applied when editing rule files. Use `/cursor-ai/create-new-rule` command for interactive workflow.
+
+---
+
+## 1. Rule Types and When to Use Them
+
+Choose the appropriate rule type based on when it should be applied:
+
+| Rule Type | When Applied | Frontmatter Settings | Use Case |
+|-----------|--------------|---------------------|----------|
+| **Always Apply** | Every chat session | `alwaysApply: true` | Global project standards (English-only) |
+| **Apply Intelligently** | AI decides based on description | `alwaysApply: false` + `description` | Context-specific patterns (most common) |
+| **Apply to Specific Files** | File matches pattern | `globs: [pattern]` | Directory or file-pattern specific standards |
+| **Apply Manually** | @-mentioned in chat | `alwaysApply: false` (no globs) | Templates or specialized workflows |
+
+---
+
+## 2. Mandatory Structure
+
+Every rule file MUST follow this hierarchy:
+
+### 2.1 Frontmatter (The Control Plane)
+```yaml
+---
+description: "Clear, concise summary for semantic routing (e.g., 'React component patterns')"
+globs:
+  - "path/to/files/**/*.ext"
+  - "another/path/**/*.ext"
+alwaysApply: false
+---
+```
+
+**Field requirements:**
+* `description`: **REQUIRED.** Concise summary for semantic routing (optimize for AI understanding)
+* `globs`: **REQUIRED for File-Specific Rules.** Must be an array (e.g., `- drivers/**/*.c`)
+* `alwaysApply`: Set to `false` unless it's a global project rule
+
+### 2.2 Content Structure
+1. **Core Principles:** 3-5 high-level requirements
+2. **Naming Conventions:** Concise table of prefixes and casing (if applicable)
+3. **Structural Guidelines:** Minimal code skeleton or pattern
+4. **Must / Must Not Checklist:** Hard requirements
+
+---
+
+## 3. Zephyr Project-Specific Requirements
+
+### 3.1 Embedded Systems Focus
+**CRITICAL:** All rules in this project MUST enforce:
+
+* **Thread Safety:** All code must be thread-safe (use mutexes, semaphores, atomic operations)
+* **Static Allocation:** Prefer compile-time allocation over dynamic allocation
+* **Zephyr Native APIs:** Prioritize Zephyr APIs over standard library equivalents
+  * Use `k_mutex` instead of `pthread_mutex`
+  * Use `k_malloc` instead of `malloc` (if dynamic allocation is unavoidable)
+  * Use `k_thread` instead of POSIX threads
+
+### 3.2 Error Handling Patterns
+All rules must define mandatory error patterns:
+* Return `-errno` for errors (e.g., `-EINVAL`, `-ENOMEM`)
+* Use `LOG_ERR()` for error logging
+* Validate all inputs at API boundaries
+
+### 3.3 Documentation
+* All public APIs require Doxygen comments
+* Use English only in all code, comments, and documentation
+
+---
+
+## 4. Content Guidelines (Cursor Best Practices)
+
+### 4.1 Keep Rules Focused and Short
+* **Target:** Under 500 lines (shorter is better)
+* **Split large rules** into multiple, composable rules
+* **Reference files** instead of copying their contents: Use `@filename.ts` syntax
+* **One concern per rule:** Don't mix unrelated patterns
+
+### 4.2 Minimize Code Examples
+* **NO** "Real-world" logic (e.g., specific sensor implementation)
+* **ONLY** structural syntax (e.g., static manager pattern, mutex locking flow)
+* **Reason:** Prevents LLM from overfitting to specific examples
+* **Show structure, not implementation**
+
+### 4.3 Prioritize Constraints
+* Focus on **negative constraints** (what is forbidden)
+* Example: "Singleton pattern is FORBIDDEN. Use Static Manager."
+* Provide concrete examples or referenced files
+* Be explicit about anti-patterns
+
+### 4.4 Formatting
+* Use **Bold** for keywords and critical requirements
+* Avoid excessive emojis unless they add clarity
+* Write rules like clear internal documentation
+* Use tables for naming conventions
+* Use checklists for verification items
+
+---
+
+## 5. Rule Templates
+
+### 5.1 Template for .mdc file (with frontmatter)
+```markdown
+---
+description: "Clear, concise description for semantic routing"
+globs:
+  - "path/to/files/**/*.ext"
+alwaysApply: false
+---
+
+# Rule Title
+
+## Core Principles
+
+1. **Principle 1**: Brief explanation
+2. **Principle 2**: Brief explanation
+3. **Principle 3**: Brief explanation
+
+## Naming Conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Components | PascalCase | `UserProfile` |
+| Functions | camelCase | `fetchUserData` |
+| Constants | UPPER_SNAKE_CASE | `MAX_RETRIES` |
+
+## Structural Guidelines
+
+### Pattern Name
+
+Use this pattern when [condition]:
+
+- Requirement 1
+- Requirement 2
+- Requirement 3
+
+Minimal example (structure only, not full logic):
+```language
+// Minimal structural skeleton here
+```
+
+## Must / Must Not
+
+### MUST:
+- ✅ Requirement 1
+- ✅ Requirement 2
+- ✅ Requirement 3
+
+### MUST NOT:
+- ❌ Anti-pattern 1
+- ❌ Anti-pattern 2
+- ❌ Anti-pattern 3
+
+## References
+
+- @example-file.ts (for canonical examples)
+- @template-file.tsx (for structural patterns)
+```
+
+### 5.2 Template for .md file (simple markdown)
+```markdown
+# Rule Title
+
+Brief description of what this rule enforces.
+
+## When to Use
+
+- Use when [condition 1]
+- Use when [condition 2]
+
+## Guidelines
+
+1. **Guideline 1**
+   - Detail
+   - Detail
+
+2. **Guideline 2**
+   - Detail
+   - Detail
+
+## Examples
+
+Reference canonical files instead of copying code:
+- See @example-pattern.ts for implementation
+- Follow structure in @template.tsx
+```
+
+---
+
+## 6. Best Practices
+
+### DO:
+- ✅ Keep rules under 500 lines (shorter is better)
+- ✅ Split large rules into multiple, composable rules
+- ✅ Reference files with `@filename` instead of copying content
+- ✅ Focus on constraints and patterns
+- ✅ Use negative constraints (what is forbidden)
+- ✅ Write rules like clear internal documentation
+- ✅ Test rules before sharing with team
+- ✅ Update rules when AI makes repeated mistakes
+- ✅ Commit rules to git for team benefit
+- ✅ Start simple, add complexity only when needed
+
+### DON'T:
+- ❌ Copy entire style guides (use linters instead)
+- ❌ Document every possible command (AI knows common tools)
+- ❌ Add instructions for rare edge cases
+- ❌ Duplicate what's already in codebase
+- ❌ Include full "real-world" code examples
+- ❌ Create rules before understanding your patterns
+- ❌ Use vague or ambiguous language
+- ❌ Mix multiple unrelated concerns
+- ❌ Create overly complex rules
+
+---
+
+## 7. Rule Examples
+
+### 7.1 File-Specific Rule (Frontend Components)
+```markdown
+---
+description: "Frontend component standards for React with Tailwind and Framer Motion"
+globs:
+  - "src/components/**/*.tsx"
+  - "src/components/**/*.jsx"
+alwaysApply: false
+---
+
+# Frontend Component Standards
+
+## Core Principles
+
+1. **Styling**: Always use Tailwind CSS for styling
+2. **Animation**: Use Framer Motion for all animations
+3. **Structure**: Follow component naming conventions
+
+## Naming Conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Component Files | PascalCase | `UserProfile.tsx` |
+| Props Interface | Component + Props | `UserProfileProps` |
+| Hooks | use + PascalCase | `useUserData` |
+
+## Component Structure
+
+```typescript
+interface ComponentNameProps {
+  // Props here
+}
+
+export const ComponentName: React.FC<ComponentNameProps> = (props) => {
+  // Component logic
+  return (
+    <motion.div className="tailwind-classes">
+      {/* JSX */}
+    </motion.div>
+  );
+};
+```
+
+## Must / Must Not
+
+### MUST:
+- ✅ Use Tailwind for all styling (no inline styles)
+- ✅ Export as named export
+- ✅ Define Props interface at top
+- ✅ Use Framer Motion for animations
+
+### MUST NOT:
+- ❌ Use CSS modules or styled-components
+- ❌ Use default exports
+- ❌ Mix styling approaches
+```
+
+### 7.2 Intelligent Rule (API Standards)
+```markdown
+---
+description: "API endpoint validation and type safety standards using Zod"
+alwaysApply: false
+---
+
+# API Validation Standards
+
+## Core Principles
+
+1. **Validation**: Use Zod for all input validation
+2. **Type Safety**: Define return types with Zod schemas
+3. **Export Types**: Export types generated from schemas
+
+## Validation Pattern
+
+```typescript
+import { z } from 'zod';
+
+// Define schema
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.email(),
+  name: z.string()
+});
+
+// Export type
+export type User = z.infer<typeof UserSchema>;
+
+// Use in endpoint
+export async function getUser(id: string): Promise<User> {
+  const data = await fetchUser(id);
+  return UserSchema.parse(data); // Validates at runtime
+}
+```
+
+## Must / Must Not
+
+### MUST:
+- ✅ Use Zod for all validation
+- ✅ Define schemas before types
+- ✅ Export inferred types
+- ✅ Validate at API boundaries
+
+### MUST NOT:
+- ❌ Use manual type guards
+- ❌ Skip validation
+- ❌ Define types separately from schemas
+```
+
+### 7.3 Manual Rule (Template)
+```markdown
+---
+description: "Express REST service template with error handling and logging"
+alwaysApply: false
+---
+
+# Express Service Template
+
+Use this template when creating new Express services.
+
+## Service Structure
+
+```typescript
+import express, { Request, Response, NextFunction } from 'express';
+import { logger } from '@/utils/logger';
+
+const router = express.Router();
+
+// Middleware
+router.use(express.json());
+router.use(errorHandler);
+
+// Routes follow RESTful principles
+router.get('/resource', getResource);
+router.post('/resource', createResource);
+
+// Error handling middleware
+function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
+  logger.error(err);
+  res.status(500).json({ error: err.message });
+}
+
+export default router;
+```
+
+## Must Include
+
+- ✅ Error handling middleware
+- ✅ Proper logging
+- ✅ RESTful route structure
+- ✅ Type-safe request handlers
+
+## Reference
+
+See @express-service-template.ts for full implementation
+```
+
+---
+
+## 8. Rule Quality Checklist
+
+When creating or editing rules, verify:
+
+### Structure:
+- [ ] Frontmatter includes `description` and appropriate `globs`
+- [ ] Rule type is appropriate (Always/Intelligent/File-Specific/Manual)
+- [ ] Core principles are clear (3-5 items)
+- [ ] Naming conventions table included (if applicable)
+- [ ] Structural guidelines with minimal skeleton
+- [ ] Must/Must Not checklist is complete
+
+### Content Quality:
+- [ ] Rule is under 500 lines
+- [ ] Uses file references (`@filename`) instead of copying code
+- [ ] Focuses on constraints and patterns, not full examples
+- [ ] Code examples are structural only (not full implementations)
+- [ ] Negative constraints are explicit (what is forbidden)
+- [ ] Language is clear and imperative
+
+### Zephyr-Specific (for this project):
+- [ ] Rule enforces thread safety where applicable
+- [ ] Rule prioritizes static allocation over dynamic
+- [ ] Rule uses Zephyr APIs (not standard library)
+- [ ] Error handling pattern is defined (`-errno`)
+- [ ] English-only requirement stated
+
+### Testing:
+- [ ] Rule tested in appropriate context
+- [ ] Rule produces expected results
+- [ ] Rule doesn't conflict with other rules
+- [ ] Rule committed to git for team sharing
+
+---
+
+## 9. Integration and Precedence
+
+### 9.1 Nested AGENTS.md Support
+Rules can also be defined in `AGENTS.md` files:
+- Place in project root or subdirectories
+- Simpler format (no frontmatter)
+- Instructions from nested files combine with parents
+- More specific instructions take precedence
+
+### 9.2 Team Rules (Team/Enterprise plans)
+- Managed from Cursor dashboard
+- Apply across entire organization
+- Can be enforced (required) or optional
+- Take precedence over Project Rules
+
+### 9.3 Rule Precedence
+When multiple rules apply, they are merged in this order:
+1. **Team Rules** (highest precedence)
+2. **Project Rules** (`.cursor/rules/` or plugin `rules/`)
+3. **User Rules** (lowest precedence)
+
+### 9.4 Auto-Discovery
+- Rules are auto-discovered by Cursor via `globs` - no manual registration needed
+- Changes to rules take effect immediately
+- No restart required
+
+---
+
+## 10. Workflow Integration
+
+### Creating New Rules:
+1. Use `/cursor-ai/create-new-rule` command for interactive workflow
+2. This rule file is automatically applied during creation
+3. Follow the templates and checklists above
+
+### Editing Existing Rules:
+1. This rule is automatically applied when editing files in `rules/` or `.cursor/rules/`
+2. Verify against the quality checklist
+3. Test changes before committing
+
+### Maintaining Rules:
+- Update rules when AI makes repeated mistakes
+- Refine descriptions for better semantic routing
+- Split rules that exceed 500 lines
+- Remove rules that are no longer needed
+- Tag `@cursor` on GitHub issues/PRs to have AI update rules
+
+---
+
+## 11. Notes and Limitations
+
+- Rules do not impact Cursor Tab or Inline Edit (Cmd/Ctrl+K)
+- User Rules are not applied to Inline Edit, only Agent (Chat)
+- Rules are included at the start of model context
+- Keep rules updated as workflows evolve
+- Start simple, add complexity only when patterns emerge

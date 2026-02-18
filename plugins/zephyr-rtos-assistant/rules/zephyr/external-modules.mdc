@@ -1,0 +1,165 @@
+---
+description: "Zephyr external module structure - module.yml, CMake, Kconfig, west integration"
+globs:
+  - "modules/**"
+alwaysApply: false
+---
+# Zephyr Module Development Standards
+
+---
+
+## 1. What is a Zephyr Module?
+
+A **Zephyr Module** is a library prepared for external distribution and cross-project reuse.
+
+**Key characteristics:**
+- Can be extracted to separate repository
+- Automatically integrates via `zephyr/module.yml`
+- Shared across multiple applications
+
+---
+
+## 2. Module Structure
+
+Modules have **identical structure to libraries** (see `rules/zephyr/libs.mdc`) with ONE additional file:
+
+```
+modules/[module_name]/
+├── [module_name]/                  # Source folder (same as libs)
+├── CMakeLists.txt                  # Same as libs
+├── Kconfig                         # Same as libs
+├── zephyr/                         # ⭐ MODULE-SPECIFIC!
+│   └── module.yml                  # Module manifest
+├── tests/                          # Same as libs
+└── README.md
+```
+
+**The difference:** `zephyr/module.yml` file enables automatic discovery.
+
+---
+
+## 3. The `zephyr/module.yml` File
+
+**Location:** `modules/[module_name]/zephyr/module.yml`
+
+```yaml
+build:
+  cmake: ..           # Path to CMakeLists.txt (relative to this file)
+  kconfig: ../Kconfig # Path to Kconfig (relative to this file)
+
+name: module_name    # Module identifier (optional)
+```
+
+This file tells Zephyr:
+- Where to find CMakeLists.txt
+- Where to find Kconfig
+- Enables automatic integration when module is used as **external module** via west.yml
+
+**IMPORTANT:** When modules are **in-tree** (in local repository), they still require manual integration in `modules/CMakeLists.txt` and `modules/Kconfig`. The `module.yml` is primarily for external distribution.
+
+---
+
+## 4. Code Standards
+
+👉 **For everything else, see `rules/zephyr/libs.mdc`:**
+- Directory structure
+- Static Manager pattern
+- Naming conventions
+- CMakeLists.txt structure
+- Kconfig structure
+- Documentation (Doxygen)
+- Testing
+
+**Modules follow identical standards to libraries.**
+
+---
+
+## 5. External Distribution ( add this to west manifest west.yml )
+
+Modules can be extracted to external repositories:
+
+1. Develop in `modules/[name]/` locally
+2. Extract to Git repository
+3. Others add via West manifest:
+
+```yaml
+manifest:
+  projects:
+    - name: my_module
+      url: https://github.com/company/my_module
+      path: modules/my_module   # Where it will be cloned locally
+      revision: main            # Tag, branch, or SHA
+```
+
+Module integrates automatically via `module.yml`.
+
+---
+
+## 6. Integration into Project
+
+### 6.1 In-Tree Modules (Local Development)
+
+**When developing modules locally in `modules/` folder, you MUST manually integrate them:**
+
+#### modules/CMakeLists.txt
+
+Add the following line to include your module in the build:
+
+```cmake
+# In modules/CMakeLists.txt
+target_include_directories(app PRIVATE .)
+
+add_subdirectory_ifdef(CONFIG_MODULE_NAME module_name)
+```
+
+#### modules/Kconfig
+
+Add the following to include your module's Kconfig:
+
+```kconfig
+# In modules/Kconfig
+menu "Modules"
+
+rsource "module_name/Kconfig"
+
+endmenu
+```
+
+**CRITICAL:** Without these updates, your module will NOT be:
+- Compiled into the application
+- Available for use
+- Visible in menuconfig
+
+### 6.2 External Modules (via west.yml)
+
+When a module is added as an external dependency via `west.yml`, Zephyr automatically discovers it through `zephyr/module.yml` and no manual integration is needed.
+
+---
+
+## 7. Key Rules
+
+**MUST:**
+✅ Follow library standards (`rules/zephyr/libs.mdc`)
+✅ Have `zephyr/module.yml` (or `module.yaml`) with `cmake:` and `kconfig:` paths
+✅ Be in `modules/` folder
+✅ **For in-tree modules:** Manually add to `modules/CMakeLists.txt` and `modules/Kconfig`
+
+**MUST NOT:**
+❌ Omit `zephyr/module.yml`
+❌ Forget to update `modules/CMakeLists.txt` and `modules/Kconfig` for in-tree modules
+
+---
+
+## 8. Summary
+
+**Modules = Libraries + `zephyr/module.yml`**
+
+**Key differences from libraries:**
+- Modules have `zephyr/module.yml` for external distribution
+- Modules are designed for cross-project reuse
+- Both modules and libraries always have Kconfig files
+- Both require manual integration when in-tree
+
+👉 **See `rules/zephyr/libs.mdc` for complete standards.**
+
+---

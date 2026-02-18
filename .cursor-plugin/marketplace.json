@@ -1,0 +1,20 @@
+{
+  "name": "zephyr-rtos-cursor-plugins",
+  "owner": {
+    "name": "Devitwise",
+    "email": "hello@devitwise.com",
+    "url": "https://devitwise.com"
+  },
+  "metadata": {
+    "description": "Zephyr RTOS development plugins for Cursor AI",
+    "version": "0.1.0",
+    "pluginRoot": "plugins"
+  },
+  "plugins": [
+    {
+      "name": "zephyr-rtos-assistant",
+      "source": "zephyr-rtos-assistant",
+      "description": "Your AI assistant for Zephyr RTOS — coding rules, commands, and best practices. Kconfig, DeviceTree, drivers, and libraries. Less doc hunting, more coding."
+    }
+  ]
+}

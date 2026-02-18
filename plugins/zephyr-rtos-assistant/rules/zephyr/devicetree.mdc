@@ -1,0 +1,182 @@
+---
+description: Zephyr Devicetree DTS syntax, structure, and conventions for .dts, .dtsi, .overlay files
+globs:
+  - "**/*.dts"
+  - "**/*.dtsi"
+  - "**/*.overlay"
+alwaysApply: false
+---
+
+# Zephyr Devicetree (DTS Source)
+
+**Apply when:** Creating or editing Devicetree source files (`.dts`, `.dtsi`, `.overlay`).
+
+**Reference:** [Zephyr Devicetree syntax and structure](https://docs.zephyrproject.org/latest/build/dts/intro-syntax-structure.html)
+
+**Related:** `rules/zephyr/devicetree-bindings.mdc` — YAML bindings for nodes.
+
+---
+
+## Core Principles
+
+1. **Hardware tree:** Nodes reflect hardware layout; children of bus controllers appear on that bus.
+2. **Compatible:** Each hardware node has `compatible = "vendor,device"`; used to match bindings.
+3. **Unit address:** Node names use `name@address` (e.g. `i2c@40003000`, `sensor@39`).
+4. **Labels:** Use node labels (`label: node@x { }`) for phandle references (`&label`).
+5. **English only:** Use English in comments and string properties.
+
+---
+
+## File Structure
+
+```dts
+/dts-v1/;
+#include <vendor/board.dtsi>
+#include "local.dtsi"
+
+/ {
+    model = "Board Name";
+    compatible = "vendor,board-id";
+
+    chosen { /* ... */ };
+    aliases { /* ... */ };
+    soc { /* ... */ };
+};
+```
+
+- **First line:** `/dts-v1/;` (DTS v1 syntax).
+- **Includes:** Use `<>` for Zephyr/vendor DTSI, `""` for project-local.
+- **Root:** Single root node `/`; board-level properties go here or in `chosen`/`aliases`.
+
+---
+
+## Node Naming and Unit Addresses
+
+| Hardware Type | Unit Address | Example |
+|---------------|--------------|---------|
+| Memory-mapped peripheral | Base address (hex) | `i2c@40003000` |
+| I2C device | Slave address (hex) | `apds9960@39` |
+| SPI device | Chip-select index | `flash@0` |
+| Memory/RAM | Start address | `memory@20000000` |
+| Flash partition | Offset in flash | `partition@20000` |
+| No address | Omit `@` | `soc`, `chosen` |
+
+---
+
+## Important Properties
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| `compatible` | string-array | Match bindings; `"vendor,device"`; first match used |
+| `reg` | array | `(address, length)` pairs for device addressing |
+| `status` | string | `"okay"` or `"disabled"`; omit or `okay` = enabled |
+| `interrupts` | phandle-array | Interrupt specifiers for the device |
+| `interrupt-parent` | phandle | Override default interrupt parent |
+
+- **compatible:** Vendor from `vendor-prefixes.txt`; device from datasheet.
+- **reg:** I2C = slave address (no length); MMIO = (base, size); SPI = chip-select.
+- **status:** Only `okay` and `disabled` are meaningful in Zephyr. Children are not implicitly disabled with parent.
+
+---
+
+## Property Value Syntax (DTS)
+
+| Type | DTS syntax | Example |
+|------|------------|---------|
+| string | `"..."` | `status = "okay";` |
+| int | `<value>` | `current-speed = <115200>;` |
+| boolean | present = true, absent = false | `hw-flow-control;` |
+| array | `<v1 v2 v3>` | `reg = <0x4000 0x1000>;` |
+| uint8-array | `[xx yy zz]` | `local-mac = [de ad be ef];` |
+| string-array | `"a", "b"` | `compatible = "vendor,a", "vendor,b";` |
+| phandle | `<&label>` | `interrupt-parent = <&gic>;` |
+| phandle-array | `<&ctrl spec...>, <&ctrl spec...>` | `pwms = <&pwm0 1 1000>;` |
+
+- **64-bit:** Two 32-bit cells big-endian: `<0xaaaa0000 0xbbbb1111>`.
+- **Expressions:** `bar = <(2 * (1 << 5))>;` — entire expression in parentheses.
+
+---
+
+## chosen and aliases
+
+```dts
+chosen {
+    zephyr,console = &uart0;
+    zephyr,flash = &flash0;
+};
+
+aliases {
+    led0 = &led0_node;
+};
+```
+
+- **chosen:** System-wide choices (console, flash, etc.).
+- **aliases:** Short names for nodes; apps use them to override hardware generically.
+- Use node labels (`&label`) in chosen/aliases.
+
+---
+
+## Naming Conventions
+
+| Element | Convention | Example |
+|---------|------------|---------|
+| Node labels | snake_case | `cdc_acm_uart0`, `button_volume_down` |
+| Compatible | lowercase, hyphen | `"vendor,sensor-device"` |
+| chosen props | `zephyr,*` | `zephyr,console` |
+| Unit address | Hex for MMIO/bus addr | `0x40003000`, `0x39` |
+| Boolean props | kebab-case | `hw-flow-control` |
+
+---
+
+## Structural Guidelines
+
+### Board DTS
+
+- Include SoC/vendor base DTSI and board-specific `.dtsi`.
+- Set `model` and `compatible` in root.
+- Populate `chosen` and `aliases` as needed.
+- Add or override board-specific nodes (buttons, LEDs, sensors).
+
+### Overlays
+
+- Extend or override nodes; do not redefine entire tree.
+- Use `/delete-node/` or `/delete-property/` to remove.
+- Reference `rules/project/license-header.mdc` for SPDX on new overlay files.
+
+### Phandle references
+
+- Define node label: `foo: device@0 { };`
+- Reference: `sibling = <&foo 1 2>;` (phandle + specifier cells).
+
+---
+
+## Must / Must Not
+
+### MUST
+
+- ✅ Start file with `/dts-v1/;`.
+- ✅ Use `compatible` in `"vendor,device"` format for hardware nodes.
+- ✅ Use unit addresses in node names where applicable.
+- ✅ Use node labels for phandle references in chosen, aliases, and phandle-arrays.
+- ✅ Use `status = "disabled"` to disable nodes; do not rely on parent status for children.
+- ✅ Use vendor prefixes from `vendor-prefixes.txt` (for upstream compatibility).
+- ✅ Write comments and string values in English.
+- ✅ Add SPDX license header to new `.dts`, `.dtsi`, `.overlay` — see `rules/project/license-header.mdc`.
+
+### MUST NOT
+
+- ❌ Use `label` property (deprecated); use node labels instead.
+- ❌ Use `DT_LABEL` in new code; use `DT_NODELABEL` or node API.
+- ❌ Use `status` values other than `"okay"` and `"disabled"` (undefined in Zephyr).
+- ❌ Omit `/dts-v1/;` or use obsolete DTS v0 syntax.
+- ❌ Redefine nodes in overlays when extending is sufficient.
+
+---
+
+## References
+
+- [Zephyr Devicetree syntax and structure](https://docs.zephyrproject.org/latest/build/dts/intro-syntax-structure.html)
+- [Zephyr Devicetree phandles](https://docs.zephyrproject.org/latest/build/dts/phandles.html)
+- [Devicetree access from C/C++](https://docs.zephyrproject.org/latest/build/dts/api-usage.html)
+- `rules/zephyr/devicetree-bindings.mdc` — YAML bindings
+- `rules/project/license-header.mdc` — SPDX headers

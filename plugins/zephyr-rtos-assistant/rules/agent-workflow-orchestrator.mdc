@@ -1,0 +1,205 @@
+---
+description: "Agent workflow orchestrator - primary directive file that enforces step-by-step workflow: (1) analyze context, (2) read applicable rules, (3) apply standards, (4) generate code. Always applied to ensure consistency and quality across all AI interactions in Zephyr RTOS project."
+alwaysApply: true
+---
+# Agent Workflow Orchestrator
+
+## About This File
+
+**Purpose:** This is the primary directive file for AI agents working on this Zephyr RTOS project. It orchestrates every interaction by enforcing a mandatory 4-step workflow.
+
+**Assumptions:**
+- AI agents need explicit guidance on which rules to read for each context
+- Reading relevant rules before coding prevents errors and ensures consistency
+- A structured workflow (analyze → read → apply → generate) produces higher quality code
+- Context-specific rules (C vs C++, drivers vs libs) should be loaded on-demand, not always
+- Universal standards (English, Doxygen) apply to all code regardless of context
+
+**How It Works:**
+1. **Always applied** - This file loads into every AI conversation
+2. **Routes to specific rules** - Based on file paths, extensions, and directories
+3. **Enforces sequence** - No code generation until Steps 1-3 complete
+4. **Prevents guessing** - Clear guidance when rules don't cover a scenario
+
+---
+
+## Workflow
+
+Follow these steps in order for every task.
+
+---
+
+## Step 1: Analyze Context
+
+**BEFORE taking any action**, answer these questions:
+
+1. **What files will be created/edited/analyzed?**
+   - Full paths (e.g., `drivers/sensor/bme280/bme280.c`)
+   - File extensions (e.g., `.c`, `.cpp`, `.sh`, `.yaml`, `.dts`)
+
+2. **What programming language?**
+   - C, C++, Bash, YAML, DeviceTree source (DTS)
+
+3. **What directory context?**
+   - `drivers/` - hardware interfaces
+   - `modules/` - reusable across projects
+   - `lib/` - application-specific code
+   - Other (scripts, config, docs)
+
+4. **What configuration/build files?**
+   - `Kconfig` - configuration options
+   - `CMakeLists.txt` - build system
+   - DeviceTree bindings (`.yaml`)
+   - Shell commands (`*shell*.c`)
+   - Changelog (`CHANGELOG.md`)
+
+5. **Is this a Cursor command execution?**
+   - Check if user invoked a command from `commands/*`
+
+---
+
+## Step 2: Read Required Rules
+
+Based on Step 1 analysis, read applicable rules **BEFORE generating any code**.
+
+**DO NOT skip this step.** Rules contain critical standards, patterns, and anti-patterns.
+
+### Directory-Specific Rules
+
+Read when working in these directories:
+
+- **`drivers/**`** → `rules/zephyr/drivers.mdc`
+  - Driver structure, DeviceTree integration, Kconfig patterns
+
+- **`modules/**`** → `rules/zephyr/external-modules.mdc`
+  - Module structure, `module.yml`, west integration
+
+- **`lib/**`** → `rules/zephyr/libs.mdc`
+  - C++ library structure, static managers, initialization
+
+### Language-Specific Rules
+
+Read when writing code in these languages:
+
+- **`*.c`, `*.h`** → `rules/coderules/c.mdc`
+  - C style: snake_case, Static Facade, Zephyr APIs, thread safety, error handling
+
+- **`*.cpp`, `*.hpp`, `*.cc`, `*.hh`** → `rules/coderules/cpp.mdc`
+  - C++ style: PascalCase, Static Manager, Zephyr APIs, thread safety, error handling
+
+- **`*.sh`, `scripts/**`** → `rules/coderules/bash.mdc`
+  - Bash standards: safety flags, error handling, robust patterns
+
+### File Type-Specific Rules
+
+Read when working with these file types:
+
+- **`Kconfig*`** → `rules/zephyr/kconfig.mdc`
+  - Kconfig structure, logging configuration, menuconfig organization
+
+- **`*.yaml` in `dts/bindings/`** → `rules/zephyr/devicetree-bindings.mdc`
+  - DeviceTree binding YAML syntax, compatible strings, properties
+
+- **`*.dts`, `*.dtsi`, `*.overlay`** → `rules/zephyr/devicetree.mdc`
+  - DeviceTree source syntax, node structure, properties
+
+- **`CMakeLists.txt`** → `rules/zephyr/cmake.mdc`
+  - CMake patterns for libs, drivers, modules
+
+- **`*shell*.c`** → `rules/zephyr/shell.mdc`
+  - Zephyr shell subcommand trees, command grouping, hierarchical structure
+
+- **`CHANGELOG.md`** → `rules/project/changelog.mdc`
+  - Keep a Changelog format, semantic versioning
+
+### Combined Scenarios
+
+When multiple contexts apply, read all relevant rules:
+
+- **Creating driver in C**
+  - Read: `zephyr/drivers.mdc` + `coderules/c.mdc`
+
+- **Creating library in C++**
+  - Read: `zephyr/libs.mdc` + `coderules/cpp.mdc`
+
+- **Editing shell commands**
+  - Read: `zephyr/shell.mdc` + `coderules/c.mdc`
+
+- **Adding Kconfig to driver**
+  - Read: `zephyr/drivers.mdc` + `zephyr/kconfig.mdc` + `coderules/c.mdc`
+
+### Cursor Command Execution
+
+When user invokes a command from `commands/*`:
+
+1. Read the command file first
+2. Follow its steps **exactly as written**
+3. No shortcuts, substitutions, or batch processing unless command explicitly allows it
+
+**Per-item and incremental processing rules:**
+
+If the command specifies:
+- *"one task per item"* → create **one todo entry per item**, not per batch
+- *"validate then write after each"* / *"append to output after each"* → after **each** item: validate against source, then **update output file** (incremental write). Do not defer all writes to the end.
+- *"re-check the source"* → re-read source data for that item before appending
+
+**DO NOT substitute the workflow with:**
+- A script that generates the whole result in one go (unless command explicitly allows)
+- Batch processing that writes output only at the end
+- Fewer, coarser todo tasks instead of per-item tasks when command specifies per-item
+
+**Why:** Incremental workflows reduce errors, persist progress (partial results survive interruptions), and localize mistakes (one wrong item doesn't invalidate all output).
+
+**If command is ambiguous:** Prefer the **stricter** interpretation (per-item, incremental). Do not assume "faster" or "one-shot" is allowed unless explicitly stated.
+
+---
+
+## Step 3: Apply Universal Standards
+
+After reading rules, ensure all work follows these project-wide standards:
+
+### Language & Documentation
+- **English only** in all code, comments, commits, filenames, and documentation
+- **Doxygen comments** required on all public APIs
+
+### Code Placement
+Know where code belongs:
+
+- **Hardware interface** → `drivers/` (C, Kconfig, DeviceTree)
+- **Multi-project reuse** → `modules/` (C or C++, `module.yml`)
+- **App-specific logic** → `lib/` (C++)
+
+---
+
+## Step 4: Generate Code
+
+Now you can generate code. Follow this priority order:
+
+1. **Rules from Step 2** - specific patterns, naming, structure, anti-patterns
+2. **Universal standards from Step 3** - English, Doxygen, placement
+3. **Existing codebase patterns** - consistency with similar code
+
+**DO NOT generate code before completing Steps 1-3.**
+
+---
+
+## When Uncertain
+
+If you encounter situations not covered by rules:
+
+- **Task falls outside defined rules** → Ask user for guidance
+- **Rules conflict or are ambiguous** → Inform user, ask for clarification
+- **Missing rule coverage** → Proceed with best judgment, inform user of the gap
+
+---
+
+## Summary
+
+This workflow ensures consistency, quality, and adherence to project standards:
+
+1. **Think first** (Analyze Context)
+2. **Read rules** (Load applicable standards)
+3. **Apply standards** (Universal project rules)
+4. **Generate code** (Following 1-3)
+
+Follow this sequence every time.

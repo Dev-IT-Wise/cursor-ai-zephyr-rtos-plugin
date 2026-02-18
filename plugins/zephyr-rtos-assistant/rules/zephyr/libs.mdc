@@ -1,0 +1,341 @@
+---
+description: "Zephyr C++ library structure - CMake integration, static managers, initialization"
+globs:
+  - "lib/**"
+alwaysApply: false
+---
+# Zephyr Library (C++) Development Standards
+
+This document defines **project structure, build integration, and initialization logic** for C++ libraries in Zephyr RTOS.
+
+**For code style and naming conventions:**
+- **C++ code**: See `rules/coderules/cpp.mdc`
+- **C code**: See `rules/coderules/c.mdc`
+
+---
+
+## 1. Architecture Overview
+
+### 1.1 Standalone Library Principle
+
+All libraries MUST be fully portable **Standalone Zephyr Libraries** that can be:
+- Integrated into any Zephyr project
+- Tested independently
+- Reused across different applications
+
+### 1.2 Static Manager Pattern (NOT Singleton)
+
+**CRITICAL: The Singleton pattern is FORBIDDEN.**
+
+Libraries use the **Static Manager** pattern:
+- All methods and fields are `static`
+- Constructor is explicitly deleted
+- Explicit initialization method
+- Private static fields hold device pointers and internal state
+- No instance creation, no global variables
+
+**Why Static Manager over Singleton:**
+- Simpler implementation (no instance management)
+- Better testability (can reset state)
+- Clearer initialization semantics
+- No hidden dependencies or lazy initialization
+
+**For detailed implementation examples, see `rules/coderules/cpp.mdc`**
+
+---
+
+## 2. Directory Structure
+
+### 2.1 Required Structure
+
+```
+lib/[lib_name]/
+├── [lib_name]/                 # Source code folder (same name as library)
+│   ├── [FileName].hpp          # Header files (PascalCase)
+│   └── [FileName].cpp          # Implementation files (PascalCase)
+├── CMakeLists.txt              # Build configuration
+├── Kconfig                     # Configuration options (REQUIRED)
+└── tests/                      # Unit tests (optional but recommended)
+    ├── CMakeLists.txt
+    ├── prj.conf
+    ├── testcase.yaml
+    └── src/
+        └── main.cpp
+```
+
+### 2.2 Key Rules
+
+1. **Source code MUST be in subfolder**: `lib/[lib_name]/[lib_name]/`
+2. **Build files at root level**: `CMakeLists.txt` at `lib/[lib_name]/`
+3. **Namespace MUST match folder name**: If folder is `logic_engine`, namespace is `logic_engine`
+4. **Include path**: Always use `#include "lib_name/FileName.hpp"`
+
+**For naming conventions, see `rules/coderules/cpp.mdc`**
+
+---
+
+## 3. Build System Files
+
+### 3.1 CMakeLists.txt Template
+
+**Location:** `lib/[lib_name]/CMakeLists.txt`
+
+```cmake
+zephyr_library()
+
+zephyr_library_sources(ib_name/FileName.cpp)
+
+zephyr_include_directories(.)
+```
+
+### 3.1.1 Conditional inclusion
+
+**Single optional source file:** use **`zephyr_library_sources_ifdef(CONFIG_X path/file.c)`** in the library’s CMakeLists.txt. No subdirectory needed.
+
+**Optional module (multiple files or a whole subdirectory):** use a **subdirectory** and **`add_subdirectory_ifdef(CONFIG_X dir)`**. Do **not** use `if(CONFIG_X)` + `zephyr_library_sources(...)` in the same CMakeLists.txt; use a subdirectory and `add_subdirectory_ifdef` instead. In the subdirectory’s `CMakeLists.txt`, add sources to the parent library target, e.g. `target_sources(parent_target PRIVATE ...)`.
+
+**Example (optional single file, e.g. one shell.c):**
+```cmake
+zephyr_library_sources_ifdef(CONFIG_UX_LEDS_SHELL led/shell.c)
+```
+
+**Example (optional module / subdirectory):**
+
+```cmake
+# lib/[lib_name]/CMakeLists.txt
+add_subdirectory_ifdef(CONFIG_SHELL shell)
+```
+
+```cmake
+# lib/[lib_name]/shell/CMakeLists.txt – adds shell sources to parent target
+target_sources(lib_target_name PRIVATE shell.c)
+```
+
+### 3.2 Kconfig
+
+**Libraries always have Kconfig files** (e.g., log levels, initialization priorities, feature flags).
+
+**Required Kconfig options:**
+- Main library enable/disable symbol (`menuconfig LIB_NAME`)
+- Log level configuration (using `subsys/logging/Kconfig.template.log_config`)
+
+**See `rules/zephyr/kconfig.mdc` for complete Kconfig standards.**
+
+---
+
+## 4. Integration into Project
+
+### 4.1 Parent Files Integration (CRITICAL)
+
+**When creating a new library, you MUST update the parent integration files:**
+
+#### lib/CMakeLists.txt
+
+Add the following line to include your library in the build:
+
+```cmake
+add_subdirectory_ifdef(CONFIG_LIB_NAME lib_name)
+```
+
+**Example:**
+```cmake
+# In lib/CMakeLists.txt
+target_include_directories(app PRIVATE .)
+
+add_subdirectory_ifdef(CONFIG_CUSTOM_LIBRARY custom_library)
+add_subdirectory_ifdef(CONFIG_LOGIC_ENGINE logic_engine)
+```
+
+#### lib/Kconfig
+
+Add your library's Kconfig to the parent Kconfig:
+
+```kconfig
+# In lib/Kconfig
+menu "Custom libraries"
+
+rsource "custom_library/Kconfig"
+
+endmenu
+```
+
+**CRITICAL:** Without these updates, your library will NOT be:
+- Compiled into the application
+- Available for use
+- Visible in menuconfig
+
+### 4.2 Adding Library to Project
+
+**Option 1: Local library (for in-tree libraries)**
+
+Libraries in `lib/` folder are automatically discovered if registered in `lib/CMakeLists.txt` (see section 7.1).
+
+**Option 2: External library**
+
+In main `CMakeLists.txt` (before `find_package(Zephyr)`):
+```cmake
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/lib_name)
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+```
+
+### 4.3 Configuration
+
+Add library configuration to `prj.conf`:
+```
+CONFIG_LIB_NAME=y
+CONFIG_LIB_NAME_LOG_LEVEL_DBG=y
+```
+
+---
+
+## 5. Auto-Initialization (Zephyr Style)
+
+### 5.1 Principle
+
+Zephyr supports **automatic initialization** using `SYS_INIT()` macro. This allows libraries to initialize automatically at boot without explicit calls in `main()`.
+
+### 5.2 Implementation Pattern
+
+**When using SYS_INIT, always use by default:**
+`SYS_INIT(auto_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);`
+Do not define custom init priority in Kconfig unless there is a specific ordering requirement.
+
+**In .cpp file:**
+```cpp
+namespace lib_name {
+
+// Static state
+bool ClassName::sIsInitialized = false;
+
+// Internal init function
+static int auto_init(void)
+{
+    // Your initialization logic
+    ClassName::init();
+    return 0;
+}
+
+// Register for auto-initialization
+SYS_INIT(auto_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY)
+
+} // namespace
+```
+
+### 5.3 Initialization Levels
+
+Zephyr defines initialization priority levels:
+
+| Level | When | Use For |
+|-------|------|---------|
+| `EARLY` | Very early boot | Critical hardware |
+| `PRE_KERNEL_1` | Before kernel | Low-level drivers |
+| `PRE_KERNEL_2` | Before kernel | Hardware init |
+| `POST_KERNEL` | After kernel | Most libraries |
+| `APPLICATION` | Last | Application logic |
+
+### 5.4 Manual vs Auto-Initialization
+
+**Choose based on use case:**
+
+| Approach | When to Use | Example |
+|----------|-------------|---------|
+| **Auto** (SYS_INIT) | Library always needed, no dependencies | System services |
+| **Manual** (explicit init()) | Optional features, dynamic config | Feature modules |
+
+**For detailed code examples, see `rules/coderules/cpp.mdc`**
+
+---
+
+## 6. Testing Guidelines
+
+### 6.1 Test Structure
+
+```
+lib/lib_name/tests/
+├── CMakeLists.txt
+├── prj.conf
+├── testcase.yaml
+└── src/
+    └── main.cpp
+```
+
+### 6.2 Test Files Structure
+
+**Required files:**
+- `tests/CMakeLists.txt` - Build configuration
+- `tests/prj.conf` - Zephyr configuration
+- `tests/testcase.yaml` - Test metadata
+- `tests/src/main.cpp` - Test implementation
+
+**For test code examples, see `rules/coderules/cpp.mdc`**
+
+---
+
+## 7. Key Rules Summary
+
+### 7.1 MUST Rules (Critical)
+
+**Architecture:**
+✅ **MUST use Static Manager pattern** (NOT Singleton)
+✅ **MUST place source in subfolder**: `lib/[name]/[name]/`
+✅ **MUST update `lib/CMakeLists.txt`** with `add_subdirectory_ifdef()`
+✅ **MUST update `lib/Kconfig`** with `rsource` for library's Kconfig
+
+**Build System:**
+✅ **MUST follow `rules/zephyr/cmake.mdc`** for CMakeLists.txt
+✅ **MUST use namespace path for includes**: `#include "lib_name/File.hpp"`
+
+**Code Style:**
+✅ **See `rules/coderules/cpp.mdc`** for all code style rules
+
+**Documentation:**
+✅ **See `rules/coderules/cpp.mdc`** for Doxygen documentation requirements
+
+### 7.2 MUST NOT Rules (Forbidden)
+
+❌ **MUST NOT use Singleton pattern**
+❌ **MUST NOT include without namespace path**
+❌ **MUST NOT forget to update `lib/CMakeLists.txt`**
+
+---
+
+## 8. Checklist for New Library
+
+Before submitting a new library, verify:
+
+**Structure:**
+- [ ] Source code in `lib/[name]/[name]/` subfolder
+- [ ] `CMakeLists.txt` at library root level
+- [ ] `Kconfig` file at library root level
+- [ ] Tests in `tests/` folder with `testcase.yaml`
+- [ ] **CRITICAL:** `lib/CMakeLists.txt` updated with `add_subdirectory_ifdef()`
+- [ ] **CRITICAL:** `lib/Kconfig` updated with `rsource "lib_name/Kconfig"`
+
+**Build System:**
+- [ ] CMakeLists.txt follows `rules/zephyr/cmake.mdc`
+- [ ] CMakeLists.txt sources use path: `lib_name/File.cpp`
+- [ ] Includes use namespace path: `"lib_name/File.hpp"`
+
+**Kconfig:**
+- [ ] Main symbol uses `menuconfig` (not `config`)
+- [ ] Log levels configured using `subsys/logging/Kconfig.template.log_config`
+- [ ] **CRITICAL:** `lib/Kconfig` updated with `rsource "lib_name/Kconfig"`
+
+**Code Style and Documentation:**
+- [ ] Follows all rules in `rules/coderules/cpp.mdc`
+- [ ] Library compiles without warnings
+- [ ] Library has been tested
+
+---
+
+## 9. References
+
+**Internal Rules:**
+- **C++ Code Style**: `rules/coderules/cpp.mdc` - Static Manager pattern, naming conventions, code examples
+- **C Code Style**: `rules/coderules/c.mdc` - Static Facade pattern for C code
+
+**External Documentation:**
+- Zephyr RTOS Documentation: https://docs.zephyrproject.org/
+- Zephyr Initialization: https://docs.zephyrproject.org/latest/kernel/services/initialization.html
+
+---

@@ -1,0 +1,500 @@
+---
+description: "Zephyr Kconfig standards - structure, logging config, menuconfig organization"
+globs:
+  - "**/Kconfig*"
+alwaysApply: false
+---
+# Zephyr Kconfig Standards
+
+**Purpose:** Define Kconfig file structure and best practices for all Zephyr components.
+
+**Reference:** https://docs.zephyrproject.org/latest/build/kconfig/tips.html
+
+---
+
+## 1. Core Principles
+
+✅ **MUST create Kconfig in every folder** - Each folder uses `rsource` to include subfolders
+✅ **MUST wrap entire file** in `menu "Folder Name"` matching parent folder
+✅ **Main symbol MUST be `menuconfig`** - Every driver, library, or module top-level symbol uses `menuconfig` (not `config`). Creates submenu `[*] Symbol --->` even when only log levels exist.
+✅ **Skip redundant `default n`/`default ""`** - Implicit for bool/string
+✅ **Always provide defaults for `int`/`hex`** - They default to empty string otherwise
+✅ **Dependencies:** Use `depends on` only (never `select`)
+✅ **Match `module` name to `LOG_MODULE_REGISTER()`** - One log level per module
+✅ **Keep prompts concise** - No "Enable" prefix
+✅ **Always provide help text** - Explain impact (RAM/flash/dependencies)
+
+---
+
+## 2. Kconfig Hierarchy
+
+**Every folder MUST have its own Kconfig file using `rsource` to include subfolders.**
+
+**Intermediate Kconfig (lib/Kconfig):**
+```kconfig
+menu "Project libraries"
+
+rsource "custom_library/Kconfig"
+rsource "another_library/Kconfig"
+
+endmenu
+```
+
+**Final Kconfig (lib/custom_library/Kconfig):**
+
+The **main symbol** (top-level enable) of every driver, library, or module MUST be `menuconfig`, not `config`. This creates a submenu and is required even when the only child is the log level block.
+
+```kconfig
+menu "Custom library"
+
+menuconfig CUSTOM_LIBRARY
+	bool "Custom library"
+	help
+	  Enable custom library.
+
+if CUSTOM_LIBRARY
+# ... options ...
+endif # CUSTOM_LIBRARY
+
+endmenu # Custom library
+```
+
+---
+
+## 3. Minimal Structure Skeleton
+
+**One general skeleton** for driver, library, or module:
+
+```kconfig
+menu "Component Name"
+
+menuconfig COMPONENT_NAME
+	bool "Component description"
+	depends on DEPENDENCY  # Optional: LED_STRIP, DT_HAS_..., etc.
+	default y  # Optional: for commonly-enabled libs
+	help
+	  Help text here.
+
+if COMPONENT_NAME
+
+# Log levels (one block per module)
+menu "Log levels"
+
+module = COMPONENT_NAME
+module-str = component-name
+source "$(ZEPHYR_BASE)/subsys/logging/Kconfig.template.log_config"
+
+endmenu # Log levels
+
+# Optional shell
+config COMPONENT_NAME_SHELL
+	bool "Shell commands"
+	depends on SHELL
+	default y
+	help
+	  Enable shell commands at runtime.
+
+# Add options here (int/hex need default and range)
+# config COMPONENT_NAME_OPTION
+# 	int "Option description"
+# 	default 10
+# 	range 1 100
+
+endif # COMPONENT_NAME
+
+endmenu # Component Name
+```
+
+**Variants:**
+- **Driver:** Add `depends on I2C` or `depends on SPI`; add `depends on DT_HAS_VENDOR_XYZ_ENABLED`.
+- **Library/Module:** Use `depends on` for features; use `default y` if usually enabled.
+- **Logging:** One log level per module; all `.c` files use same module name in `LOG_MODULE_REGISTER()`.
+
+---
+
+## 4. Naming Conventions
+
+| Element | Format | Example |
+|---------|--------|---------|
+| Menu name | `"Title Case"` | `"Sensor AXL"` |
+| Symbol | `UPPER_SNAKE_CASE` | `SENSOR_AXL` |
+| `module` | `UPPER_SNAKE_CASE` | `SENSOR_AXL` |
+| `module-str` | `lowercase-with-hyphens` | `sensor-axl` |
+| Prompt | `"Lowercase description"` | `"AXL sensor driver"` |
+
+---
+
+## 5. Dependencies: Always `depends on`, Never `select`
+
+**Rule:** Use **`depends on`** for all dependencies. Do **not** use `select`.
+
+```kconfig
+config USB_CONSOLE
+	bool "USB console support"
+	depends on CONSOLE
+```
+
+**Why:** `select` forces the selected symbol to `y` and ignores its dependencies, leading to invalid configurations and hard-to-maintain dependency chains.
+
+### 5.1 When prerequisite is usually on: Use `default y`
+
+```kconfig
+config CONSOLE
+	bool "Console support"
+	default y
+
+config USB_CONSOLE
+	bool "USB console support"
+	depends on CONSOLE
+```
+
+### 5.2 The `imply` Statement
+
+`imply` suggests a value but respects dependencies:
+
+```kconfig
+config SOC_FOO
+	bool "FOO SoC"
+	imply USB_KEYBOARD  # Suggests USB_KEYBOARD=y, user can disable
+
+config USB_KEYBOARD
+	bool "USB keyboard support"
+	depends on USB  # imply respects this
+```
+
+---
+
+## 6. Log Level Configuration
+
+### 6.1 Structure
+
+```kconfig
+menu "Log levels"
+
+module = COMPONENT_NAME
+module-str = component-name
+source "$(ZEPHYR_BASE)/subsys/logging/Kconfig.template.log_config"
+
+endmenu # Log levels
+```
+
+**CRITICAL:** Always use `$(ZEPHYR_BASE)/subsys/logging/Kconfig.template.log_config` path.
+
+### 6.2 One Log Level per Module
+
+Define **one** log level per module (one `module` / `source` block). All source files use same `LOG_MODULE_REGISTER(COMPONENT_NAME, CONFIG_COMPONENT_NAME_LOG_LEVEL)`.
+
+### 6.3 C Code Integration
+
+**Kconfig:**
+```kconfig
+module = SENSOR_AXL
+module-str = sensor-axl
+```
+
+**C code:**
+```c
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(SENSOR_AXL, CONFIG_SENSOR_AXL_LOG_LEVEL);
+```
+
+---
+
+## 7. Advanced Patterns
+
+### 7.1 Factor Out Dependencies
+
+```kconfig
+if FOO_SUPPORT
+
+config FOO_FEATURE_1
+	bool "Feature 1"
+
+config FOO_FEATURE_2
+	bool "Feature 2"
+
+endif # FOO_SUPPORT
+```
+
+### 7.2 Optional Prompts
+
+```kconfig
+config MASK
+	hex "Bitmask" if HAS_CONFIGURABLE_MASK
+	default 0xFF
+```
+
+When `HAS_CONFIGURABLE_MASK=n`: no prompt, default applies. When `y`: user can configure.
+
+### 7.3 Hidden Menus (`visible if`)
+
+```kconfig
+menu "Advanced settings"
+	visible if EXPERT_MODE
+
+config ADVANCED_OPTION
+	int "Advanced option"
+	default 100
+
+endmenu
+```
+
+Menu hidden when `EXPERT_MODE=n`, but defaults still apply. Use `visible if` instead of `depends on` to preserve defaults.
+
+### 7.4 Range Validation
+
+```kconfig
+config SAMPLE_RATE
+	int "Sample rate (Hz)"
+	default 50
+	range 1 400
+```
+
+### 7.5 Conditional Defaults
+
+```kconfig
+config STACK_SIZE
+	hex "Stack size"
+	default 0x200 if FOO_ENABLED
+	default 0x100
+```
+
+First matching condition wins.
+
+---
+
+## 8. Reference Example: `lib/ux/led/Kconfig`
+
+```kconfig
+menu "UX LED"
+
+menuconfig UX_LEDS
+	bool "UX LED library"
+	depends on LED_STRIP
+	default y
+	help
+	  Enable UX LED library for RGB LED control.
+
+if UX_LEDS
+
+menu "Log levels"
+
+module = UX_LEDS
+module-str = ux-led
+source "$(ZEPHYR_BASE)/subsys/logging/Kconfig.template.log_config"
+
+endmenu # Log levels
+
+config UX_LEDS_SHELL
+	bool "Shell configuration for UX LED library"
+	depends on SHELL
+	default y
+	help
+	  Enable shell commands for runtime control.
+
+endif # UX_LEDS
+
+endmenu # UX LED
+```
+
+**Driver vs Library vs Module:**
+
+| Type | On menuconfig | Extra options |
+|------|----------------|----------------|
+| **Driver** | `depends on I2C/SPI`; `depends on DT_HAS_VENDOR_XYZ_ENABLED` | int/hex with `default` and `range`; optional trigger configs |
+| **Library** | `depends on FOO`; `default y` if usually on | Optional `*_SHELL` |
+| **Module** | Often no extra deps | Buffer size, feature toggles, optional `*_SHELL` |
+
+---
+
+## 9. Common Pitfalls
+
+### 9.1 "Stuck" Symbols
+
+**Problem:** Symbol with prompt doesn't change when toggling dependency.
+
+**Solutions:**
+- **A)** Remove prompt (always derive): `config STACK_SIZE hex # No prompt`
+- **B)** Conditional prompt: `hex "Stack size" if !FOO`
+- **C)** Add custom option: `config CUSTOM_STACK_SIZE bool "Use custom"`
+
+### 9.2 Hidden Symbols
+
+Assignments to hidden (promptless) symbols in config files are **ignored**. Hidden symbols derive values from other symbols.
+
+### 9.3 Conditional Includes
+
+`if` has **no effect** on `source`. File is always included; symbols inside get `depends on` added.
+
+### 9.4 Redundant Dependencies
+
+```kconfig
+if FOO_SUPPORT
+config FOO_FEATURE
+	depends on FOO_SUPPORT  # REDUNDANT!
+endif
+```
+
+Remove redundant `depends on` inside `if` blocks.
+
+### 9.5 Dependencies
+
+See **section 5**: use `depends on` only, never `select`.
+
+---
+
+## 10. Testing
+
+```bash
+# Interactive testing
+west build -t menuconfig
+
+# Automated validation
+python3 scripts/kconfig/lint.py
+
+# Generate minimal config
+west build -t savedefconfig
+```
+
+**Check:**
+- Symbols in logical locations (use `/` to jump)
+- Dependencies work (toggle parent, check children)
+- No "stuck" symbols
+- Prompts clear and concise
+
+---
+
+## 11. Prompt and Help Text
+
+**Prompts:**
+- ✅ Concise, lowercase: `"USB console"` not `"Enable USB console support"`
+- ✅ Descriptive: `"AXL accelerometer sensor driver"` not `"SENSOR_AXL"`
+
+**Help text MUST include:**
+- What the symbol enables
+- Resource impact (RAM/flash/power)
+- Dependencies or requirements
+- Valid ranges
+
+```kconfig
+config SENSOR_AXL_TRIGGER
+	bool "Trigger support"
+	depends on GPIO
+	help
+	  Enable interrupt-based trigger support for data-ready events.
+	  Requires GPIO pin configured in devicetree.
+	  Reduces CPU polling overhead.
+```
+
+---
+
+## 12. ✅ MUST Rules
+
+✅ **MUST create Kconfig in every folder**
+✅ **MUST wrap entire file** in `menu "Folder Name"` / `endmenu`
+✅ **MUST use `menuconfig`** for the main symbol of every driver, library, or module
+✅ **MUST skip `default n`** for bool (implicit)
+✅ **MUST skip `default ""`** for string (implicit)
+✅ **MUST provide defaults** for int/hex
+✅ **MUST use `depends on`** for dependencies (§5)
+✅ **MUST wrap log levels** in `menu "Log levels"`
+✅ **MUST match `module` name** to `LOG_MODULE_REGISTER()`
+✅ **MUST use UPPER_SNAKE_CASE** for `module`
+✅ **MUST use lowercase-with-hyphens** for `module-str`
+✅ **MUST create one log level config** per module
+✅ **MUST provide help text** for all user-facing symbols
+✅ **MUST use `$(ZEPHYR_BASE)/subsys/logging/Kconfig.template.log_config`**
+✅ **MUST keep prompts concise**
+✅ **MUST explain resource impact** in help text
+
+---
+
+## 13. ❌ MUST NOT Rules
+
+❌ **MUST NOT skip Kconfig** in any folder level
+❌ **MUST NOT forget** `menu "Folder Name"` wrapper
+❌ **MUST NOT use `config`** for the main component symbol (use `menuconfig` for drivers, libs, modules)
+❌ **MUST NOT use `default n`** for bool (redundant)
+❌ **MUST NOT use `default ""`** for string (redundant)
+❌ **MUST NOT use `select`** (§5)
+❌ **MUST NOT place log levels** outside `menu "Log levels"`
+❌ **MUST NOT mismatch** `module` name and `LOG_MODULE_REGISTER()`
+❌ **MUST NOT define multiple log levels** per module
+❌ **MUST NOT omit help text** for user-facing symbols
+❌ **MUST NOT use "Enable" prefix** in prompts
+❌ **MUST NOT use relative paths** for log template
+❌ **MUST NOT assume conditional includes** work
+
+---
+
+## 14. Quick Checklist
+
+**Hierarchy:**
+- [ ] Every folder has Kconfig
+- [ ] Intermediate Kconfigs use `rsource`
+- [ ] Final Kconfigs contain symbols
+
+**Structure:**
+- [ ] Wrapped in `menu` / `endmenu`
+- [ ] Menu name matches folder
+- [ ] **`menuconfig`** for main symbol (never `config` for driver/lib/module root)
+- [ ] Child symbols in `if` / `endif`
+- [ ] Log levels in `menu "Log levels"`
+
+**Defaults:**
+- [ ] All `int`/`hex` have defaults
+- [ ] No `default n` or `default ""`
+- [ ] Use `default y` for common features
+
+**Dependencies:**
+- [ ] Dependencies: `depends on` only (§5)
+- [ ] Dependencies factored with `if`
+- [ ] No redundant dependencies in `if` blocks
+
+**Logging:**
+- [ ] One `module` block per module
+- [ ] `module` matches `LOG_MODULE_REGISTER()`
+- [ ] `module` uses UPPER_SNAKE_CASE
+- [ ] `module-str` uses lowercase-with-hyphens
+- [ ] Uses `$(ZEPHYR_BASE)/...` path
+
+**Documentation:**
+- [ ] All symbols have help text
+- [ ] Prompts concise (no "Enable")
+- [ ] Help explains impact (RAM/flash/power)
+- [ ] Help mentions valid ranges
+
+**Validation:**
+- [ ] Tested in `menuconfig`
+- [ ] Verified dependencies work
+- [ ] No "stuck" symbols
+
+**Advanced:**
+- [ ] Optional prompts for board-specific
+- [ ] `visible if` for menus (preserves defaults)
+- [ ] `range` for numeric constraints
+- [ ] Conditional defaults ordered correctly
+
+---
+
+## 15. Reference Summary
+
+**Documentation:**
+- **Kconfig Tips:** https://docs.zephyrproject.org/latest/build/kconfig/tips.html
+- **Kconfig Language:** https://www.kernel.org/doc/html/latest/kbuild/kconfig-language.html
+
+**Example:**
+- **Canonical:** `lib/ux/led/Kconfig` - General skeleton (menuconfig + logs + shell)
+
+**Common Patterns:**
+
+| Pattern | Syntax | Use Case |
+|---|---|---|
+| Factor dependencies | `if FOO ... endif` | Avoid repeating `depends on FOO` |
+| Optional prompt | `hex "Prompt" if COND` | Configurable on some boards only |
+| Hidden menu | `menu "X" visible if COND` | Hide menu but keep defaults |
+| Range validation | `range MIN MAX` | Enforce valid numeric ranges |
+| Conditional default | `default X if COND` | Different defaults per condition |
+| Soft suggestion | `imply SYMBOL` | Suggest but allow user override |
+
+---

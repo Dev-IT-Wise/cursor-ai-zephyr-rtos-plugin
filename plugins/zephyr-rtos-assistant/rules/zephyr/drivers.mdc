@@ -1,0 +1,382 @@
+---
+description: "Zephyr driver development - structure, DeviceTree, Kconfig, API patterns"
+globs:
+  - "drivers/**"
+alwaysApply: false
+---
+# Zephyr Driver Development Standards
+
+## 1. Architecture and File Structure
+
+```
+drivers/[driver_name]/
+├── [driver_name]/
+│   ├── [driver_name].c      # Main driver implementation
+│   ├── [driver_name].h      # Public API header
+│   └── [driver_name]_reg.h  # Register definitions (REQUIRED)
+├── CMakeLists.txt         # Build configuration
+├── Kconfig                # Configuration options
+└── tests/
+    └── [test_files]       # Ztest unit tests
+
+# NOTE: DeviceTree bindings MUST be in root dts/bindings/ folder:
+# dts/bindings/[vendor]/[binding-name].yaml
+# NOT in the driver folder!
+```
+
+**Key Requirements:**
+- Source files in `drivers/[driver_name]/[driver_name]/` subfolder
+- **Every driver MUST have a `registers.h` file** (`[driver_name]_reg.h`) — holds register addresses, masks, and bit definitions. Internal to the driver, not part of public API.
+- **DeviceTree bindings MUST be created in root `dts/bindings/` folder** (NOT in driver folder)
+  - Location: `dts/bindings/[vendor]/[binding-name].yaml`
+- **NO** `zephyr/module.yml` file needed (drivers are integrated via `drivers/CMakeLists.txt`)
+
+## 2. C Coding Standards
+
+### 2.1 Complete Driver Code Example
+
+**sensor_axl/sensor_axl.h:**
+
+```c
+/**
+ * @file sensor_axl.h
+ * @brief AXL Accelerometer Sensor Driver
+ *
+ * This driver provides support for the AXL accelerometer sensor
+ * using the Zephyr sensor API. The driver supports reading 3-axis
+ * acceleration data via I2C interface.
+ *
+ * @author Embedded Systems Team
+ * @date 2026-01-19
+ */
+
+#pragma once
+
+#include <zephyr/device.h>
+#include <zephyr/drivers/sensor.h>
+
+/**
+ * @def SENSOR_AXL_MAX_SAMPLES
+ * @brief Maximum number of samples in buffer
+ */
+#define SENSOR_AXL_MAX_SAMPLES 100
+
+/**
+ * @struct sensor_axl_config
+ * @brief Configuration structure for AXL sensor
+ *
+ * Contains compile-time configuration data for the sensor.
+ */
+struct sensor_axl_config {
+    /** Pointer to I2C device */
+    const struct device *i2c_dev;
+    /** I2C device address (7-bit) */
+    uint8_t i2c_addr;
+};
+
+/**
+ * @struct sensor_axl_data
+ * @brief Runtime data structure for AXL sensor
+ */
+struct sensor_axl_data {
+    /** X-axis acceleration value (raw) */
+    int16_t x_axis;
+    /** Y-axis acceleration value (raw) */
+    int16_t y_axis;
+    /** Z-axis acceleration value (raw) */
+    int16_t z_axis;
+};
+
+/**
+ * @brief Initialize the AXL sensor
+ *
+ * @param[in] dev Pointer to device structure
+ * @return 0 on success, negative errno on failure
+ * @retval 0 Success
+ * @retval -ENODEV I2C device not available
+ * @retval -EIO Communication error
+ *
+ * @note This function is called automatically by the device initialization
+ */
+int sensor_axl_init(const struct device *dev);
+
+/**
+ * @brief Fetch sensor samples
+ *
+ * @param[in] dev Pointer to device structure
+ * @return 0 on success, negative errno on failure
+ * @see sensor_axl_channel_get()
+ */
+int sensor_axl_sample_fetch(const struct device *dev);
+
+/**
+ * @brief Get sensor channel value
+ *
+ * @param[in] dev Pointer to device structure
+ * @param[in] channel_type Type of sensor channel to read
+ * @param[out] val_out Pointer to sensor_value structure to fill
+ * @return 0 on success, negative errno on failure
+ * @note Call sensor_axl_sample_fetch() before this function
+ */
+int sensor_axl_channel_get(const struct device *dev,
+                           enum sensor_channel channel_type,
+                           struct sensor_value *val_out);
+```
+
+**sensor_axl/sensor_axl.c:**
+
+```c
+/**
+ * @file sensor_axl.c
+ * @brief Implementation of AXL Accelerometer Sensor Driver
+ */
+
+#include "sensor_axl/sensor_axl.h"
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(sensor_axl, CONFIG_SENSOR_AXL_LOG_LEVEL);
+
+int sensor_axl_init(const struct device *dev)
+{
+    const struct sensor_axl_config *config = dev->config;
+    struct sensor_axl_data *data = dev->data;
+    /* ... implementation ... */
+    return 0;
+}
+
+int sensor_axl_sample_fetch(const struct device *dev)
+{
+    /* ... implementation ... */
+    return 0;
+}
+
+int sensor_axl_channel_get(const struct device *dev,
+                           enum sensor_channel channel_type,
+                           struct sensor_value *val_out)
+{
+    /* ... implementation ... */
+    return 0;
+}
+
+static const struct sensor_driver_api sensor_axl_api = {
+    .sample_fetch = sensor_axl_sample_fetch,
+    .channel_get = sensor_axl_channel_get,
+};
+
+/* Prefer DT_INST_FOREACH_STATUS_OKAY for multi-instance support (recommended) */
+#define SENSOR_AXL_INIT(inst)                                                              \
+    static struct sensor_axl_data sensor_axl_data_##inst;                                    \
+    static const struct sensor_axl_config sensor_axl_config_##inst = { /* from DT */ };     \
+    DEVICE_DT_INST_DEFINE(inst, sensor_axl_init, NULL, &sensor_axl_data_##inst,            \
+                          &sensor_axl_config_##inst, POST_KERNEL,                          \
+                          CONFIG_SENSOR_INIT_PRIORITY, &sensor_axl_api)
+
+DT_INST_FOREACH_STATUS_OKAY(SENSOR_AXL_INIT)
+```
+
+### 2.2 Initialization Levels
+
+Choose the appropriate level for `DEVICE_DT_INST_DEFINE` / `DEVICE_DEFINE`:
+
+| Level | When to use |
+|-------|-------------|
+| **PRE_KERNEL_1** | No dependencies; MMIO/IRQ only; cannot use kernel services |
+| **PRE_KERNEL_2** | Depends on PRE_KERNEL_1 devices; no kernel services |
+| **POST_KERNEL** | Requires kernel services (mutex, threads, etc.) — most common for application drivers |
+
+**Priority:** Use `CONFIG_DRIVER_INIT_PRIORITY` (Kconfig, default 90) for ordering within the same level.
+
+### 2.3 Error Handling
+
+- Return **0** on success, **negative errno** on failure (e.g. `-EINVAL`, `-ENODEV`, `-EIO`).
+- Validate inputs at API boundaries; return appropriate error codes instead of propagating invalid state.
+- Use `LOG_ERR()` for unexpected failures; document return values in Doxygen.
+- Prefer interrupt-based implementation over polling when hardware supports interrupts.
+
+### 2.4 Driver API Types
+
+- **Subsystem API** (sensor, gpio, i2c, etc.): Use Zephyr's subsystem API struct; the subsystem defines `DEVICE_API()` / `DEVICE_API_GET()`.
+- **Device-specific API**: Custom API struct (e.g. `my_driver_api`); cast `dev->api` to your type. Prefix public functions with the driver/compatible name (e.g. `hw_version_get_version`).
+
+## 3. Build System (CMake)
+
+**CMakeLists.txt:**
+
+```cmake
+zephyr_library()
+
+zephyr_library_sources(sensor_axl/sensor_axl.c)
+
+zephyr_include_directories(.)
+```
+
+## 4. Kconfig
+
+**Drivers always have Kconfig files** for configuration options and log level control.
+
+**Required Kconfig options:**
+- Main driver enable/disable symbol (`menuconfig DRIVER_NAME`)
+- Log level configuration (using `subsys/logging/Kconfig.template.log_config`)
+- Driver-specific configuration options (e.g., initialization priority, feature flags)
+
+**See `rules/zephyr/kconfig.mdc` for complete Kconfig standards.**
+
+## 5. Driver Integration
+
+**IMPORTANT:** Drivers do NOT require `zephyr/module.yml` files. They are integrated directly into the build system via `drivers/CMakeLists.txt` (see section 6).
+
+**Alternative: Using Drivers as Extra Modules**
+
+If you need to include DTS bindings within the driver folder structure (not recommended for standard drivers), you can add the driver as an extra module in your application's `CMakeLists.txt`:
+
+```cmake
+# In app/CMakeLists.txt
+list(APPEND ZEPHYR_EXTRA_MODULES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../drivers/blink
+)
+
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+```
+
+**CRITICAL:** When using a driver as an extra module:
+- **DO NOT** add the driver to `drivers/CMakeLists.txt` (via `add_subdirectory_ifdef()`)
+- **DO NOT** add the driver to `drivers/Kconfig` (via `rsource`)
+- This will cause Kconfig conflicts because the driver's Kconfig will be loaded twice (once as extra module, once from `drivers/Kconfig`)
+
+**Note:** This approach is only needed if you want DTS bindings in the driver folder. For standard drivers, use the global `dts/bindings/` folder and integrate via `drivers/CMakeLists.txt`.
+
+---
+
+## 6. Parent Files Integration (CRITICAL)
+
+**When creating a new driver, you MUST update the parent integration files:**
+
+### 6.1 drivers/CMakeLists.txt
+
+Add the following line to include your driver in the build:
+
+```cmake
+add_subdirectory_ifdef(CONFIG_DRIVER_NAME driver_name)
+```
+
+**Example:**
+```cmake
+# In drivers/CMakeLists.txt
+# Out-of-tree drivers for custom classes
+add_subdirectory_ifdef(CONFIG_BLINK blink)
+
+# Out-of-tree drivers for existing driver classes
+add_subdirectory_ifdef(CONFIG_SENSOR sensor)
+add_subdirectory_ifdef(CONFIG_SENSOR_AXL sensor_axl)
+```
+
+### 6.2 drivers/Kconfig
+
+Add the following line to include your driver's Kconfig:
+
+```kconfig
+rsource "driver_name/Kconfig"
+```
+
+**Example:**
+```kconfig
+# In drivers/Kconfig
+menu "Drivers"
+rsource "blink/Kconfig"
+rsource "sensor/Kconfig"
+rsource "sensor_axl/Kconfig"
+endmenu
+```
+
+**CRITICAL:** Without these updates, your driver will NOT be:
+- Visible in menuconfig
+- Compiled into the application
+- Available for configuration
+
+---
+
+## 7. DeviceTree Bindings
+
+**CRITICAL:** DeviceTree bindings must be placed in the **global** `dts/bindings/` folder at the project root, NOT in the driver folder.
+
+**Location:** `dts/bindings/[vendor]/[binding-name].yaml`
+
+**Example: `dts/bindings/vendor/sensor-axl.yaml`:**
+
+```yaml
+description: AXL Accelerometer Sensor
+
+compatible: "vendor,sensor-axl"
+
+include: [sensor-device.yaml, i2c-device.yaml]
+
+properties:
+  sample-rate:
+    type: int
+    default: 50
+    description: Sampling rate in Hz
+
+  sensitivity:
+    type: int
+    enum: [2, 4, 8, 16]
+    default: 2
+    description: Sensitivity range in g
+```
+
+**Alternative Approach (Not Recommended):**
+
+If you absolutely need DTS bindings within the driver folder, you must:
+1. Add the driver as an extra module in your application's `CMakeLists.txt` (see section 5)
+2. Create a `dts/bindings/` subfolder within the driver
+3. Create a `zephyr/module.yml` file in the driver
+
+**This approach is NOT recommended** - use the global `dts/bindings/` folder instead.
+
+## 8. Documentation Requirements
+
+**For Doxygen documentation standards, see `rules/coderules/c.mdc`**
+
+All driver code must be fully documented following project C documentation standards.
+
+## 9. Checklist
+
+**Structure:**
+- ✅ Source files in `[driver_name]/[driver_name]/` subfolder
+- ✅ **`[driver_name]_reg.h`** — register definitions (REQUIRED)
+- ✅ `CMakeLists.txt` at driver root level
+- ✅ `Kconfig` file at driver root level (REQUIRED)
+- ✅ DeviceTree bindings in **global** `dts/bindings/` folder (NOT in driver folder)
+- ✅ **NO** `zephyr/module.yml` file (drivers don't need it)
+- ✅ **CRITICAL:** `drivers/CMakeLists.txt` updated with `add_subdirectory_ifdef()`
+- ✅ **CRITICAL:** `drivers/Kconfig` updated with `rsource "driver_name/Kconfig"`
+
+**Code Style:**
+- ✅ Follow C coding standards from `rules/coderules/c.mdc`
+- ✅ Namespaced includes: `#include "driver_name/file.h"`
+- ✅ `zephyr_include_directories(.)` in CMakeLists.txt
+- ✅ Use `DT_INST_FOREACH_STATUS_OKAY` for multi-instance drivers
+- ✅ Choose correct init level (usually `POST_KERNEL` for app drivers)
+
+**Kconfig:**
+- ✅ Main symbol uses `menuconfig` (not `config`)
+- ✅ Log levels configured using `subsys/logging/Kconfig.template.log_config`
+- ✅ Driver-specific options defined as needed
+- ✅ **CRITICAL:** `drivers/Kconfig` updated with `rsource "driver_name/Kconfig"`
+
+**Documentation:**
+- ✅ Follow Doxygen standards from `rules/coderules/c.mdc`
+
+**Common Driver Mistakes to Avoid:**
+- ❌ Missing `[driver_name]_reg.h` (register definitions file)
+- ❌ Wrong folder structure
+- ❌ Missing `Kconfig` file
+- ❌ Adding `zephyr/module.yml` (drivers don't need it)
+- ❌ Placing DTS bindings in driver folder (should be in global `dts/bindings/`)
+- ❌ Missing `zephyr_include_directories(.)`
+- ❌ Not updating `drivers/CMakeLists.txt` and `drivers/Kconfig`
+- ❌ Not following C coding style (see `rules/coderules/c.mdc`)
+- ❌ Using single `DEVICE_DT_INST_DEFINE(0, ...)` when multiple instances are possible — use `DT_INST_FOREACH_STATUS_OKAY`
+
+## 10. References
+
+- [Zephyr Device Driver Model](https://docs.zephyrproject.org/latest/kernel/drivers/index.html) — init levels, API structure, MMIO, deferred init

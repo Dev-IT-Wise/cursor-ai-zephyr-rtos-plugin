@@ -1,0 +1,444 @@
+---
+description: "Bash scripting standards for project automation - safety flags, error handling, robust patterns"
+globs:
+  - "**/*.sh"
+  - "scripts/**"
+alwaysApply: false
+---
+# Bash Scripting Standards
+
+## 1. File Structure & Safety
+
+### 1.1 Shebang & Flags
+All scripts MUST start with the standard Bash shebang and safety flags (The "Unofficial Bash Strict Mode").
+
+```bash
+#!/bin/bash
+set -euo pipefail
+```
+
+- `set -e`: Exit immediately if a command exits with a non-zero status
+- `set -u`: Treat unset variables as an error
+- `set -o pipefail`: Return value of a pipeline is the status of the last command to exit with a non-zero status
+
+### 1.2 Script Header
+Include a brief comment describing the script's purpose:
+```bash
+#!/bin/bash
+# Brief description of what the script does
+set -euo pipefail
+```
+
+## 2. Variable Naming & Usage
+
+### 2.1 Naming Conventions
+- Use `UPPER_CASE` for constants and environment variables
+- Use `lower_case` for local variables
+- Use descriptive names: `BUILD_DIR` not `BD`, `SCRIPT_DIR` not `SD`
+
+### 2.2 Variable Defaults
+Always provide defaults for optional variables:
+```bash
+BUILD_DIR="${BUILD_DIR:-build}"
+DEBUG="${DEBUG:-false}"
+```
+
+### 2.3 Path Handling
+Always use absolute paths when possible:
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$WORKSPACE_ROOT"
+```
+
+## 3. Error Handling
+
+### 3.1 Error Messages
+Use clear, actionable error messages with colors:
+```bash
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${RED}Error: Build directory '$BUILD_DIR' does not exist!${NC}"
+```
+
+### 3.2 Exit Codes
+Use appropriate exit codes:
+- `0`: Success
+- `1`: General error
+- `2`: Misuse of shell command
+
+## 4. Help & Menu Functions
+
+### 4.1 Help Function Pattern
+Help functions MUST be short, concise, and follow this pattern:
+
+```bash
+usage() {
+    cat << EOF
+Usage: $0 [OPTIONS]
+
+Brief one-line description.
+
+Options:
+    -b, --board BOARD     Description (default: value)
+    -d, --debug          Description
+    -h, --help           Show this help message
+
+Examples:
+    $0                                    # Basic usage
+    $0 --debug                            # With option
+    $0 -b custom_board --debug            # Multiple options
+
+EOF
+}
+```
+
+### 4.2 Menu Functions
+For interactive menus, keep help concise:
+
+```bash
+show_menu() {
+    cat << EOF
+Options:
+  [1] Build
+  [2] Flash
+  [3] Clean
+  [h] Help
+  [q] Quit
+EOF
+}
+
+show_help() {
+    cat << EOF
+Quick Help:
+  build    - Build application
+  flash    - Flash to device
+  clean    - Clean build directory
+  help     - Show this help
+  quit     - Exit
+
+EOF
+}
+```
+
+**Rules for Help/Menu:**
+- Keep descriptions to one line per option
+- Use consistent formatting (tabs for alignment)
+- Include default values in parentheses
+- Show 2-3 practical examples
+- Total help text should fit in ~15-20 lines
+
+### 4.3 Environment Variables in Help
+Help functions MUST document all environment variables used directly by the script and their default values:
+
+```bash
+usage() {
+    cat << EOF
+Usage: $0 [OPTIONS]
+
+Brief one-line description.
+
+Options:
+    -b, --board BOARD     Description (default: value)
+    -d, --debug          Description
+    -h, --help           Show this help message
+
+Environment Variables:
+    BUILD_DIR            Build directory path (default: build)
+    DEBUG                Enable debug output (default: false)
+    VERBOSE              Verbose logging level (default: 0)
+
+Examples:
+    $0                                    # Basic usage
+    $0 --debug                            # With option
+    BUILD_DIR=custom_build $0 -b board    # With environment variable
+
+EOF
+}
+```
+
+**Rules for Environment Variables Documentation:**
+- List ALL environment variables used directly by the script (those accessed via `${VAR:-default}` pattern)
+- Show default values in parentheses: `(default: value)`
+- Use consistent formatting with Options section (tabs for alignment)
+- Include examples showing how to use environment variables
+- Place Environment Variables section between Options and Examples
+- Only document variables that are actually used in the script, not internal/local variables
+
+## 5. Argument Parsing
+
+### 5.1 Standard Pattern
+Use `while` loop with `case` statement:
+
+```bash
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -b|--board)
+            BOARD="$2"
+            shift 2
+            ;;
+        -d|--debug)
+            DEBUG=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Error: Unknown option: $1${NC}"
+            usage
+            exit 1
+            ;;
+    esac
+done
+```
+
+### 5.2 Required Arguments
+Validate required arguments after parsing:
+```bash
+if [[ -z "$BOARD" ]]; then
+    echo -e "${RED}Error: Board is required${NC}"
+    usage
+    exit 1
+fi
+```
+
+## 6. Functions
+
+### 6.1 Function Definition
+Use descriptive names and local variables:
+```bash
+build_application() {
+    local board="$1"
+    local debug="$2"
+
+    echo -e "${YELLOW}Building for board: $board${NC}"
+    # ... implementation
+}
+```
+
+### 6.2 Function Organization
+Order functions logically:
+1. Helper functions (usage, colors, validation)
+2. Core functions (main logic)
+3. Main execution block (linear code, no `main()` function needed for simple scripts)
+
+**Note:** For simple automation scripts, avoid using a `main()` function. Execute code directly after argument parsing. Use `main()` only for complex scripts with multiple entry points or libraries.
+
+## 7. Output & Logging
+
+### 7.1 Color Output
+Define colors at the top:
+```bash
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+```
+
+### 7.2 Status Messages
+Use consistent prefixes:
+- `Error:` for errors
+- `Warning:` for warnings
+- No prefix for informational messages
+
+## 8. Best Practices
+
+### 8.1 Quotes
+Always quote variables to prevent word splitting:
+```bash
+# Good
+if [ -d "$BUILD_DIR" ]; then
+    rm -rf "$BUILD_DIR"
+fi
+
+# Bad
+if [ -d $BUILD_DIR ]; then
+    rm -rf $BUILD_DIR
+fi
+```
+
+### 8.2 Command Substitution
+Use `$()` instead of backticks:
+```bash
+# Good
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Bad
+SCRIPT_DIR=`cd $(dirname $0) && pwd`
+```
+
+### 8.3 Conditional Checks
+Prefer `[[ ]]` over `[ ]` for bash:
+```bash
+# Good
+if [[ -z "$VAR" ]]; then
+    # ...
+fi
+
+# Also acceptable for POSIX compatibility
+if [ -z "$VAR" ]; then
+    # ...
+fi
+```
+
+### 8.4 Temporary Files
+Use `mktemp` for temporary files:
+```bash
+TEMP_FILE="$(mktemp)"
+trap "rm -f '$TEMP_FILE'" EXIT
+```
+
+## 9. Script Structure Template
+
+For simple scripts, use linear structure (no `main()` function needed):
+
+```bash
+#!/bin/bash
+# Script description
+set -euo pipefail
+
+# Get script directory (for relative path resolution)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Constants
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Default values
+VAR="${VAR:-default}"
+
+# Functions (helper functions first)
+usage() {
+    cat << EOF
+Usage: $0 [OPTIONS]
+Brief description.
+
+Options:
+    -h, --help    Show help
+
+Environment Variables:
+    VAR            Description (default: default)
+
+Examples:
+    $0                    # Basic usage
+    VAR=value $0          # With environment variable
+
+EOF
+}
+
+# Cleanup function (if needed)
+cleanup() {
+    # Cleanup code (e.g., remove temp files)
+    :
+}
+trap cleanup EXIT
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Error: Unknown option: $1${NC}"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validation (check required dependencies/files)
+if ! command -v required_tool &> /dev/null; then
+    echo -e "${RED}Error: required_tool not found${NC}"
+    exit 1
+fi
+
+# Main script logic (executed directly, no main() function)
+echo -e "${YELLOW}Starting...${NC}"
+# ... script logic here ...
+echo -e "${GREEN}Done!${NC}"
+```
+
+### 9.1 When to Use `main()` Function
+Use `main()` function only for:
+- Complex scripts with multiple entry points
+- Scripts that need to be sourced and tested
+- Libraries that export functions
+
+For simple automation scripts, linear structure is preferred and more idiomatic in bash.
+
+## 10. Additional Best Practices
+
+### 10.1 Dependency Checking
+Always check for required commands/tools:
+```bash
+if ! command -v west &> /dev/null; then
+    echo -e "${RED}Error: west not found. Please install nRF Connect SDK.${NC}"
+    exit 1
+fi
+```
+
+### 10.2 File/Directory Existence
+Check before using:
+```bash
+if [[ ! -d "$BUILD_DIR" ]]; then
+    echo -e "${RED}Error: Directory '$BUILD_DIR' does not exist${NC}"
+    exit 1
+fi
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo -e "${YELLOW}Warning: Config file not found, using defaults${NC}"
+fi
+```
+
+### 10.3 Trap for Cleanup
+Use trap for cleanup operations:
+```bash
+cleanup() {
+    rm -f "$TEMP_FILE"
+    # Other cleanup
+}
+trap cleanup EXIT
+trap 'cleanup; exit 1' ERR  # Also cleanup on error
+```
+
+### 10.4 Command Execution with Error Handling
+Check command results explicitly:
+```bash
+if ! west build -b "$BOARD"; then
+    echo -e "${RED}Build failed!${NC}"
+    exit 1
+fi
+```
+
+### 10.5 Environment Variables
+Document and validate environment variables:
+```bash
+# Use BUILD_DIR from environment if set, otherwise default
+BUILD_DIR="${BUILD_DIR:-build}"
+
+# Validate if needed
+if [[ -z "$REQUIRED_ENV_VAR" ]]; then
+    echo -e "${RED}Error: REQUIRED_ENV_VAR must be set${NC}"
+    exit 1
+fi
+```
+
+### 10.6 Script Directory Resolution
+Always resolve script directory for relative paths:
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$WORKSPACE_ROOT"
+```
+
+**Note:** Use `${BASH_SOURCE[0]}` not `$0` - it works correctly even when script is sourced.

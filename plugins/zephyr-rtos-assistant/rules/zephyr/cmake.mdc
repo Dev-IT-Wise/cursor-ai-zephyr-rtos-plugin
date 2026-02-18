@@ -1,0 +1,93 @@
+---
+description: CMake build configuration for Zephyr libraries, drivers, and modules
+globs:
+  - lib/**/CMakeLists.txt
+  - drivers/**/CMakeLists.txt
+  - modules/**/CMakeLists.txt
+alwaysApply: false
+---
+
+# Zephyr CMake Standards
+
+Standards for `CMakeLists.txt` in Zephyr libraries, drivers, and modules. Simple, repeatable patterns only.
+
+---
+
+## Core Principles
+
+1. **Zephyr API only**: Use Zephyr CMake functions (`zephyr_library`, `zephyr_library_sources`) — never raw `add_library` or `target_sources` for library targets.
+2. **Include directory required**: Every library CMakeLists.txt MUST add the current directory so sources can use `#include "subdir/file.h"`.
+3. **Public vs private includes**:
+   - `zephyr_include_directories(.)` — **public** includes; propagates to consumers of the library (linkers, parents).
+   - `zephyr_library_include_directories(.)` — **private** includes; only visible within the library target, not exported to dependents.
+4. **Optional sources**: Use `zephyr_library_sources_ifdef(CONFIG_X path/file.c)` for single optional files; use `add_subdirectory_ifdef(CONFIG_X dir)` for optional subdirectories.
+5. **Parent integration**: Libraries and drivers MUST be registered in parent `CMakeLists.txt` via `add_subdirectory_ifdef(CONFIG_SYMBOL subdir)`.
+
+---
+
+## Naming Conventions
+
+| Element | Convention | Example |
+|---------|------------|---------|
+| Library target (named) | snake_case | `ux_led`, `ux_buttons` |
+| Source paths | subdir/file.c | `led/led.c`, `sensor_axl/sensor_axl.c` |
+| Kconfig symbol | CONFIG_PREFIX_NAME | `CONFIG_UX_LEDS_SHELL` |
+
+---
+
+## Structural Guidelines
+
+### Library CMakeLists.txt (typical)
+
+```cmake
+zephyr_library_named(target_name)
+
+zephyr_library_sources(subdir/file1.c)
+zephyr_library_sources(subdir/file2.c)
+
+zephyr_library_sources_ifdef(CONFIG_OPTIONAL_FEATURE subdir/optional.c)
+
+zephyr_include_directories(.)
+```
+
+### Unnamed library (name from directory)
+
+```cmake
+zephyr_library()
+
+zephyr_library_sources(lib_name/main.c)
+zephyr_include_directories(.)
+```
+
+### Parent integration
+
+```cmake
+# In lib/CMakeLists.txt or lib/ux/CMakeLists.txt or drivers/CMakeLists.txt
+add_subdirectory_ifdef(CONFIG_SYMBOL subdir_name)
+```
+
+---
+
+## Must / Must Not
+
+### MUST:
+- ✅ Call `zephyr_library()` or `zephyr_library_named(name)` first
+- ✅ Add `zephyr_include_directories(.)` for public API headers, or `zephyr_library_include_directories(.)` for internal-only headers
+- ✅ Use `zephyr_library_sources(path/file.c)` with subdir path
+- ✅ Use `zephyr_library_sources_ifdef(CONFIG_X path/file.c)` for single optional file
+- ✅ Use `add_subdirectory_ifdef(CONFIG_X dir)` in parent for optional subdirectory
+- ✅ Register in parent `CMakeLists.txt` with `add_subdirectory_ifdef(CONFIG_SYMBOL subdir)`
+
+### MUST NOT:
+- ❌ Use `if(CONFIG_X) zephyr_library_sources(...) endif()` — use `zephyr_library_sources_ifdef` instead
+- ❌ Use raw `add_library` or `target_sources` for Zephyr libraries
+- ❌ Omit include directories — builds will fail
+- ❌ Forget parent integration — library will not be compiled
+
+---
+
+## References
+
+- @lib/ux/led/CMakeLists.txt — canonical example
+- `rules/zephyr/libs.mdc` — library structure, parent integration
+- `rules/zephyr/drivers.mdc` — driver structure, parent integration

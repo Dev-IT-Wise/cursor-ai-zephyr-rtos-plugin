@@ -1,0 +1,331 @@
+---
+description: "C++ coding style for Zephyr project"
+globs:
+  - "**/*.cpp"
+  - "**/*.hpp"
+  - "**/*.cc"
+  - "**/*.hh"
+alwaysApply: false
+---
+**Applies to:** files when written in C++
+
+---
+
+## 1. Core Principles
+
+- **PascalCase** for classes/files, **camelCase** for methods
+- **snake_case** namespace (matches folder name)
+- **Modern C++** (C++17/C++20) with **no exceptions**, **no RTTI**
+- **Thread-safe** (Zephyr mutexes), **static allocation only**
+
+---
+
+## 2. Naming Conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| **Files** | `PascalCase.hpp/cpp` | `DataProcessor.hpp` |
+| **Classes** | `PascalCase` | `class DataProcessor` |
+| **Namespace** | `snake_case` (matches folder) | `namespace data_processor` |
+| **Methods** | `camelCase()` | `init()`, `processData()` |
+| **Local Variables** | `camelCase` | `sensorValue`, `bufferSize` |
+| **Static Fields** | `s` + `PascalCase` | `sIsInitialized`, `sDataBuffer`, `sMutex` |
+| **Instance Fields** | `m` + `PascalCase` | `mValue`, `mState` |
+| **Constants/Macros** | `UPPER_SNAKE_CASE` | `MAX_BUFFER_SIZE` |
+
+---
+
+## 3. Minimal Structural Skeleton
+
+### Header (.hpp)
+```cpp
+#pragma once
+
+#include <zephyr/kernel.h>
+
+namespace module_name {
+
+class ModuleName {
+public:
+    ModuleName() = delete;  // Required! No instances!
+
+    static bool init();
+    static bool process(const uint8_t* data, size_t len);
+
+private:
+    // ✅ ALL state declared HERE in .hpp (NOT in .cpp anonymous namespace!)
+    static bool sIsInitialized;
+    static uint8_t sBuffer[256];
+    static struct k_mutex sMutex;
+};
+
+} // namespace module_name
+```
+
+### Header with Custom Error Enum (when specific error codes needed)
+```cpp
+#pragma once
+
+#include <zephyr/kernel.h>
+
+namespace module_name {
+
+enum class ModuleError {
+    Ok = 0,
+    AlreadyInitialized,
+    NotInitialized,
+    InvalidParam,
+    Busy
+};
+
+class ModuleName {
+public:
+    ModuleName() = delete;
+
+    static ModuleError init();
+    static ModuleError process(const uint8_t* data, size_t len);
+
+private:
+    static bool sIsInitialized;
+    static struct k_mutex sMutex;
+};
+
+} // namespace module_name
+```
+
+### Implementation (.cpp)
+```cpp
+#include "module_name/ModuleName.hpp"
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(MODULE_NAME, CONFIG_MODULE_NAME_LOG_LEVEL);
+
+namespace module_name {
+
+// ✅ Define ALL static members from .hpp
+bool ModuleName::sIsInitialized = false;
+uint8_t ModuleName::sBuffer[256] = {0};
+K_MUTEX_DEFINE(ModuleName::sMutex);
+
+bool ModuleName::init()
+{
+    k_mutex_lock(&sMutex, K_FOREVER);
+
+    if (sIsInitialized) {
+        k_mutex_unlock(&sMutex);
+        return false;  // Already initialized
+    }
+
+    // Logic: Lock -> Check -> Init -> Unlock
+    sIsInitialized = true;
+    k_mutex_unlock(&sMutex);
+    return true;
+}
+
+bool ModuleName::process(const uint8_t* data, size_t len)
+{
+    if (!sIsInitialized) return false;
+    if (!data || !len) return false;
+
+    k_mutex_lock(&sMutex, K_FOREVER);
+    // Logic here
+    k_mutex_unlock(&sMutex);
+    return true;
+}
+
+} // namespace
+```
+
+---
+
+## 4. Must / Must Not Rules
+
+### ✅ Architecture (MUST)
+- **MUST use Static Manager** (NOT Singleton - no `getInstance()`)
+- **MUST delete constructor**: `ClassName() = delete;`
+- **MUST have explicit `init()` method**
+- **MUST declare ALL state in .hpp** as `private static`
+- **MUST define ALL state in .cpp** (linker definitions)
+- **MUST use thread-safety** with `struct k_mutex`
+- **MUST lock critical sections**: `k_mutex_lock(&sMutex, K_FOREVER)` + `k_mutex_unlock(&sMutex)`
+
+### ✅ Naming (MUST)
+- **MUST use PascalCase** for classes/files
+- **MUST use camelCase** for methods/local variables
+- **MUST use `s` + PascalCase** for static fields (`sIsInitialized`, `sDataBuffer`)
+- **MUST use `m` + PascalCase** for instance fields (`mValue`)
+- **MUST use snake_case namespace** (matches folder)
+
+### ✅ Zephyr Integration (MUST)
+- **MUST use Zephyr types** (`uint8_t`, `uint32_t`, `size_t`)
+- **MUST return `bool`** for simple success/failure operations
+- **MUST define custom error enum** when caller needs specific error codes (e.g., `ModuleError::InvalidParam`, `ModuleError::NotInitialized`)
+- **MUST NOT use raw errno** (`-EINVAL`, `-EBUSY`, etc.) - use bool or custom enum instead
+- **MUST use `LOG_MODULE_REGISTER`** in .cpp
+- **MUST use `K_MUTEX_DEFINE`** or `k_mutex_init()` for mutexes
+
+### ✅ File Structure (MUST)
+- **MUST use `#pragma once`** (NOT include guards)
+- **MUST document public APIs** with Doxygen
+
+### ❌ Prohibitions (MUST NOT)
+- **MUST NOT use Singleton pattern** (no hidden instance)
+- **MUST NOT create instances** (constructor deleted)
+- **MUST NOT use exceptions** (`try`, `catch`, `throw`) or RTTI (`typeid`, `dynamic_cast`)
+- **MUST NOT use global variables** (use static fields in class)
+- **MUST NOT hide state in anonymous namespaces** in .cpp
+- **MUST NOT use dynamic allocation** (`new`/`delete`, `std::vector`, `std::map` for storage)
+- **MUST NOT use virtual functions** (avoid unless necessary)
+- **MUST NOT use multiple inheritance**
+
+---
+
+## 5. Code Style
+
+### K&R Braces
+```cpp
+void method() {
+    if (condition) {
+        statement;
+    }
+}
+```
+
+### Spacing
+```cpp
+if (condition)           // Space after keyword
+functionName(arg1, arg2) // No space after function name
+x = y + z;               // Spaces around operators
+int* ptr;                // Pointer/ref with type
+```
+
+### Logging
+```cpp
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(MODULE_NAME, CONFIG_MODULE_NAME_LOG_LEVEL);
+
+LOG_ERR("Error: %d", code);
+LOG_WRN("Warning");
+LOG_INF("Info");
+LOG_DBG("Debug: %d", value);
+```
+
+### Documentation
+```cpp
+/**
+ * @brief Brief description (simple success/failure)
+ * @param[in] input Input parameter
+ * @param[out] output Output parameter
+ * @return true on success, false on failure
+ */
+static bool method(int input, int* output);
+
+/**
+ * @brief Brief description (when specific error codes needed)
+ * @param[in] input Input parameter
+ * @return ModuleError code
+ * @retval ModuleError::Ok Success
+ * @retval ModuleError::InvalidParam Invalid parameter
+ * @retval ModuleError::NotInitialized Module not initialized
+ */
+static ModuleError methodWithErrors(int input);
+```
+
+---
+
+## 6. Anti-Patterns (What NOT to Do)
+
+### ❌ Singleton
+```cpp
+// WRONG
+static Module& getInstance() { static Module m; return m; }
+
+// CORRECT
+Module() = delete;
+static bool init();
+```
+
+### ❌ Hidden State in Anonymous Namespace
+```cpp
+// WRONG - state in .cpp anonymous namespace
+namespace { bool init = false; }
+
+// CORRECT - state in .hpp class
+class Module {
+private:
+    static bool sIsInitialized;  // .hpp
+};
+bool Module::sIsInitialized = false;  // .cpp
+```
+
+### ❌ Raw errno Returns
+```cpp
+// WRONG - returning raw errno codes
+int process(const uint8_t* data) {
+    if (!data) return -EINVAL;
+    if (!sInit) return -ENOTSUP;
+    return 0;
+}
+
+// CORRECT - bool for simple success/failure
+bool process(const uint8_t* data) {
+    if (!data || !sInit) return false;
+    return true;
+}
+
+// CORRECT - custom enum when specific error codes needed
+ModuleError process(const uint8_t* data) {
+    if (!data) return ModuleError::InvalidParam;
+    if (!sInit) return ModuleError::NotInitialized;
+    return ModuleError::Ok;
+}
+```
+
+### ❌ Missing Thread Safety
+```cpp
+// WRONG - race condition!
+sCounter++;
+
+// CORRECT
+k_mutex_lock(&sMutex, K_FOREVER);
+sCounter++;
+k_mutex_unlock(&sMutex);
+```
+
+### ❌ Wrong Naming
+```cpp
+// WRONG
+static bool isInitialized;   // Missing 's' prefix
+static bool m_init;          // Wrong prefix ('m' is for instance fields)
+static uint8_t buffer[256];  // Missing 's' prefix
+
+// CORRECT
+static bool sIsInitialized;
+static uint8_t sBuffer[256];
+```
+
+### ❌ Dynamic Allocation
+```cpp
+// WRONG
+static std::vector<uint8_t> sData;
+sBuffer = new uint8_t[256];
+
+// CORRECT
+static uint8_t sBuffer[256];
+```
+
+### ❌ Missing Static Member Definition
+```cpp
+// WRONG - linker error: undefined reference
+int Module::init() {
+    sIsInitialized = true;  // ERROR!
+}
+
+// CORRECT - define in .cpp first
+bool Module::sIsInitialized = false;  // in .cpp
+int Module::init() {
+    sIsInitialized = true;  // OK
+}
+```
+
+---

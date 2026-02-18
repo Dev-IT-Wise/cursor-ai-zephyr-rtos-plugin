@@ -1,0 +1,171 @@
+---
+description: "Changelog maintenance - Keep a Changelog format, semantic versioning"
+globs:
+  - "**/CHANGELOG.md"
+  - "**/CHANGELOG"
+alwaysApply: false
+---
+
+# Changelog Standards
+
+This project maintains a `CHANGELOG.md` file following the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## File Structure
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- New features go here
+
+### Changed
+- Changes in existing functionality go here
+
+### Deprecated
+- Soon-to-be removed features go here
+
+### Removed
+- Removed features go here
+
+### Fixed
+- Bug fixes go here
+
+### Security
+- Security vulnerability fixes go here
+
+## [1.0.0] - YYYY-MM-DD
+
+### Added
+- Initial release
+
+[Unreleased]: https://github.com/username/repo/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/username/repo/releases/tag/v1.0.0
+```
+
+## Rules
+
+### 1. Change Categories
+Use these categories in this order:
+- **Added** - for new features
+- **Changed** - for changes in existing functionality
+- **Deprecated** - for soon-to-be removed features
+- **Removed** - for now removed features
+- **Fixed** - for any bug fixes
+- **Security** - in case of vulnerabilities
+
+### 2. Versioning
+- Use [Semantic Versioning](https://semver.org/spec/v2.0.0.html): `MAJOR.MINOR.PATCH`
+  - **MAJOR**: Incompatible API changes
+  - **MINOR**: Backwards-compatible functionality additions
+  - **PATCH**: Backwards-compatible bug fixes
+- Format: `## [X.Y.Z] - YYYY-MM-DD`
+
+### 3. Unreleased Section
+- Always maintain an `[Unreleased]` section at the top
+- Add all new changes here during development
+- Move to a versioned section when releasing
+
+### 4. Entry Format
+- Use bullet points (`-`)
+- Write clear, concise descriptions
+- Start with a verb in past tense or present tense consistently
+- Reference issue/PR numbers when applicable: `(#123)`
+- Group related changes together
+
+### 5. Examples
+
+#### Good Entries
+```markdown
+### Added
+- Support for multiple Zephyr SDK versions (#45)
+- New driver for BME680 sensor
+- CI workflow for automated testing
+
+### Fixed
+- Memory leak in sensor manager initialization (#67)
+- Build error with GCC 12+ (#72)
+```
+
+#### Bad Entries
+```markdown
+### Added
+- stuff
+- updates
+- various improvements
+```
+
+### 6. When to Update
+Update CHANGELOG.md:
+- ✅ When adding a new feature
+- ✅ When fixing a bug
+- ✅ When making breaking changes
+- ✅ When deprecating features
+- ✅ When removing features
+- ✅ When addressing security issues
+- ❌ For internal refactoring (unless it affects users)
+- ❌ For typo fixes in comments
+- ❌ For CI/build configuration changes (unless user-facing)
+
+### 7. Release Process
+When creating a release:
+1. Rename `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD`
+2. Create a new empty `[Unreleased]` section
+3. Update comparison links at the bottom
+4. Commit with message: `chore: release vX.Y.Z`
+
+## Example Full Changelog
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.2.0] - 2024-01-15
+
+### Added
+- Support for Zephyr SDK 3.5 and 3.6 (#89)
+- New GPIO driver for custom board (#92)
+- West extension for automated flashing
+
+### Changed
+- Updated build scripts to use newer Docker image (#95)
+- Improved error messages in sensor module
+
+### Fixed
+- Race condition in message queue initialization (#88)
+- Build warnings with -Werror enabled (#91)
+
+## [1.1.0] - 2023-12-10
+
+### Added
+- CI workflow for building with multiple Zephyr versions
+- Documentation generation with Sphinx and Doxygen
+
+### Fixed
+- Memory corruption in buffer handling (#76)
+
+## [1.0.0] - 2023-11-01
+
+### Added
+- Initial release
+- Basic driver structure
+- Module system with Static Manager pattern
+- Build and flash scripts
+
+[Unreleased]: https://github.com/org/repo/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/org/repo/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/org/repo/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/org/repo/releases/tag/v1.0.0
+```

@@ -1,0 +1,62 @@
+---
+description: "Zephyr shell command structure using SHELL_CMD, SHELL_STATIC_SUBCMD_SET_CREATE, subcommand trees"
+globs:
+  - "**/*shell*.c"
+alwaysApply: false
+---
+# Zephyr Shell Commands
+
+## Core Principles
+
+1. **Subcommand trees**: Use `SHELL_STATIC_SUBCMD_SET_CREATE` for hierarchical command structure
+2. **Grouping**: **ADD subcommands** when commands can be easily grouped by a common concept (e.g., "background" vs "temporary", "read" vs "write")
+3. **Flat vs nested**: Avoid flat command lists when grouping reduces ambiguity or improves discoverability
+
+## When to Add Subcommand Groups
+
+**ADD a subcommand group** when:
+
+- Several commands share a clear conceptual category (e.g., all "background" animations vs "temporary" animations)
+- Same action names appear with different contexts (e.g., `fade` under `background` vs `fade` under `temporary`)
+- Grouping makes the CLI easier to navigate (e.g., `ux_led anim background fade` vs `ux_led anim_fade_background`)
+
+**Keep flat** when:
+
+- There are only 2–4 unrelated commands
+- No natural grouping exists
+
+## Subcommand Tree Structure
+
+```c
+/* Leaf subcommand set (no further children) */
+SHELL_STATIC_SUBCMD_SET_CREATE(group_a_cmd,
+    SHELL_CMD(action1, NULL, "Description", cmd_action1),
+    SHELL_CMD(action2, NULL, "Description", cmd_action2),
+    SHELL_SUBCMD_SET_END);
+
+/* Parent subcommand set (references child sets) */
+SHELL_STATIC_SUBCMD_SET_CREATE(parent_cmd,
+    SHELL_CMD(group_a, &group_a_cmd, "Group A commands", NULL),
+    SHELL_CMD(group_b, &group_b_cmd, "Group B commands", NULL),
+    SHELL_CMD(direct, NULL, "Direct action", cmd_direct),
+    SHELL_SUBCMD_SET_END);
+```
+
+## Must / Must Not
+
+### MUST
+
+- ✅ Use `SHELL_STATIC_SUBCMD_SET_CREATE` for each subcommand group
+- ✅ Reference child sets with `&variable_name` when a command has children
+- ✅ Use `NULL` as handler for parent entries that only route to subcommands
+- ✅ End each set with `SHELL_SUBCMD_SET_END`
+- ✅ Add subcommand groups when commands can be clearly and easily grouped
+
+### MUST NOT
+
+- ❌ Flatten hierarchical commands when grouping would improve clarity
+- ❌ Use `SHELL_CMD` with a handler when the entry only routes to subcommands (use `NULL`)
+
+## Reference
+
+- @lib/ux/led/led/shell.c (lines 476–506) – canonical subcommand tree: `ux_led` → `anim` → `background` / `temporary` → `fade`, `blink`, `set_pixel`, `stack_fill`
